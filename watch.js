@@ -175,7 +175,13 @@
       }
       syncToday();
       const st0 = S[t] || 0, eaten = eatenOn(today), burned = T[t];
-      let html = `<h1>Годинник</h1><section class="card"><h2>Сьогодні</h2><div class="stats">
+      const aggToday = (steps.find(v => ymd(new Date(v.startDate)) === t) || {}).value;
+      const diagText = stepDiag(src.raw || [], Math.round(aggToday || 0));
+      let html = `<h1>Годинник</h1><details class="card" open><summary><b>Перевірка кроків (тимчасово)</b></summary>
+        <p>Натисніть кнопку і вставте скопійоване в чат для Claude. Так я побачу, як Samsung передає кроки, і виправлю підрахунок.</p>
+        <button class="btn" id="cpDiag" type="button">Скопіювати для Claude</button><p id="dMsg" role="status"></p>
+        <textarea readonly id="diagTxt" style="min-height:70px">${esc(diagText)}</textarea></details>
+        <section class="card"><h2>Сьогодні</h2><div class="stats">
         <div class="stat wide"><span>Кроки</span><b>${fmt(st0)} <span>з 15 000</span></b><div class="bar"><i style="width:${Math.min(100, st0 / 150)}%"></i></div></div>
         <div class="stat"><span>Активні ккал</span><b>${A[t] != null ? fmt(A[t]) : "–"}</b></div>
         <div class="stat"><span>Спалено${estimated ? " ≈" : ""}</span><b>${burned != null ? fmt(burned) : "–"}</b></div>
@@ -212,6 +218,10 @@
         ${src.last ? `<p>Останні кроки в Health Connect: о ${src.last.toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"})}.</p>` : ""}
         ${src.list.length ? `<p>Кроки сьогодні за пристроями: ${src.list.map(x => esc(srcName(x.name)) + " " + fmt(x.sum)).join(", ")}.</p>` : ""}</section>` + transferCard();
       body.innerHTML = html;
+      $("cpDiag").onclick = async () => {
+        try { await navigator.clipboard.writeText(diagText); $("dMsg").className = "ok"; $("dMsg").textContent = "Скопійовано. Вставте в чат."; }
+        catch (e) { $("diagTxt").select(); $("dMsg").className = "err"; $("dMsg").textContent = "Утримуйте палець на тексті нижче, «Виділити все», «Копіювати»."; }
+      };
       $("refresh").onclick = () => { busy = false; renderWatch(); };
       $("hcSet").onclick = () => Health.openHealthConnectSettings().catch(() => {});
       if ($("askAgain")) $("askAgain").onclick = async () => {
@@ -264,15 +274,34 @@
     return {total: Math.round(total), hasWatch: W.length > 0, per, last: last ? new Date(last) : null};
   }
   async function stepSources(from, to) {
-    const res = {merged: null, last: null, list: []};
+    const res = {merged: null, last: null, list: [], raw: []};
     try {
       const r = await Health.readSamples({dataType: "steps", startDate: from.toISOString(), endDate: to.toISOString(), limit: 5000, ascending: true});
       const m = mergeSteps(r.samples || []);
+      res.raw = r.samples || [];
       res.last = m.last;
       res.list = Object.entries(m.per).map(([name, sum]) => ({name, sum: Math.round(sum)})).sort((a, b) => b.sum - a.sum);
       if (m.hasWatch) res.merged = m.total;
     } catch (e) {}
     return res;
+  }
+  function stepDiag(raw, agg) {
+    const hh = d => String(new Date(d).getHours()).padStart(2, "0");
+    const g = {};
+    for (const x of raw) {
+      const k = `${x.deviceType || "-"} | ${x.sourceName || "-"} | ${x.sourceId || "-"}`;
+      const o = g[k] || (g[k] = {n: 0, sum: 0, dmin: 1e12, dmax: 0, first: null, last: null, h: {}});
+      const dur = (new Date(x.endDate) - new Date(x.startDate)) / 6e4;
+      o.n++; o.sum += +x.value || 0; o.dmin = Math.min(o.dmin, dur); o.dmax = Math.max(o.dmax, dur);
+      if (!o.first || x.startDate < o.first) o.first = x.startDate; if (!o.last || x.endDate > o.last) o.last = x.endDate;
+      const h = hh(x.startDate); o.h[h] = (o.h[h] || 0) + (+x.value || 0);
+    }
+    let t = `DIAG ${new Date().toISOString()} agg=${agg} raw=${raw.length}\n`;
+    for (const [k, o] of Object.entries(g)) {
+      t += `${k}: n=${o.n} sum=${Math.round(o.sum)} dur=${o.dmin.toFixed(1)}-${o.dmax.toFixed(1)}m ${hh(o.first)}:00-${new Date(o.last).toTimeString().slice(0, 5)}\n  ` +
+        Object.keys(o.h).sort().map(h => h + ":" + Math.round(o.h[h])).join(" ") + "\n";
+    }
+    return t;
   }
   async function stepsByDay(days, now) {
     // merged steps for each of the last `days` days (one query per day keeps each under the record limit)
