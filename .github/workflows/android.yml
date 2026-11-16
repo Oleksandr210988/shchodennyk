@@ -36,6 +36,14 @@ jobs:
           KEYSTORE_PASSWORD: shchodennyk
           KEY_ALIAS: shchodennyk
         run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease --stacktrace && cp app/build/outputs/apk/release/app-release.apk $GITHUB_WORKSPACE/shchodennyk.apk
+      - name: Check APK
+        run: |
+          AAPT=$(ls $ANDROID_HOME/build-tools/*/aapt2 | tail -1)
+          $AAPT dump badging shchodennyk.apk | grep -E "package:|sdkVersion|application-label"
+          $AAPT dump permissions shchodennyk.apk
+          unzip -l shchodennyk.apk | grep -E "assets/public/(index.html|watch.js|privacypolicy.html|food/index.html|gym/index.html)|capacitor.plugins.json"
+          unzip -p shchodennyk.apk assets/capacitor.plugins.json
+          $(ls $ANDROID_HOME/build-tools/*/apksigner | tail -1) verify --print-certs shchodennyk.apk | head -3
       - uses: actions/upload-artifact@v4
         with:
           name: shchodennyk-apk
