@@ -11,8 +11,8 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-:root{--food:#2f6f4f;--gym:#1f5fbf;--bar:#fff;--line:#dbe1de;--muted:#5f6a65;--bg:#f3f5f2}
-@media (prefers-color-scheme:dark){:root{--food:#7cc39c;--gym:#5b97ec;--bar:#1d2321;--line:#2d3532;--muted:#9ba6a1;--bg:#141817;color-scheme:dark}}
+:root{--food:#2f6f4f;--gym:#1f5fbf;--watch:#8a4fbf;--fg:#1c2220;--bar:#fff;--line:#dbe1de;--muted:#5f6a65;--bg:#f3f5f2}
+@media (prefers-color-scheme:dark){:root{--food:#7cc39c;--gym:#5b97ec;--watch:#c39cf0;--fg:#e7ece9;--bar:#1d2321;--line:#2d3532;--muted:#9ba6a1;--bg:#141817;color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
 body{display:flex;flex-direction:column;height:100dvh;padding-top:env(safe-area-inset-top,0px)}
@@ -24,39 +24,44 @@ nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
 nav button svg{width:26px;height:26px}
 nav button[aria-pressed="true"][data-tab="food"]{color:var(--food)}
 nav button[aria-pressed="true"][data-tab="gym"]{color:var(--gym)}
+nav button[aria-pressed="true"][data-tab="watch"]{color:var(--watch)}
+#v-watch{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px max(16px,env(safe-area-inset-left,0px)) 24px;color:var(--fg)}
+#v-watch .wrap{max-width:560px;margin:0 auto;display:grid;gap:12px}
+#v-watch h1{font-size:24px;margin:0}
+#v-watch h2{font-size:17px;margin:0 0 8px}
+.card{background:var(--bar);border:1px solid var(--line);border-radius:16px;padding:14px}
+.card p{margin:0 0 8px;color:var(--muted);line-height:1.45}
+.card p:last-child{margin-bottom:0}
+.btn{display:block;width:100%;min-height:48px;border-radius:12px;border:0;background:var(--watch);color:#fff;font:700 16px inherit;cursor:pointer;margin-top:8px}
+.btn.sec{background:none;color:var(--fg);border:1px solid var(--line);font-weight:600}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--bg);border-radius:12px;padding:10px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--watch)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px}
+.wo{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.wo:last-child{border-bottom:0}
+.wo small{display:block;color:var(--muted)}
+.wo .r{text-align:right;white-space:nowrap}
+textarea{width:100%;min-height:90px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:10px;font:13px monospace}
+.ok{color:var(--food);font-weight:600}
+.err{color:#c0392b;font-weight:600}
 nav button[aria-pressed="true"] span{text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:2px}
 </style></head><body>
 <div id="frames">
   <iframe id="f-food" title="Калорії" allow="camera; clipboard-write" hidden></iframe>
   <iframe id="f-gym" title="Тренування" allow="camera; clipboard-write" hidden></iframe>
+  <section id="v-watch" hidden aria-label="Годинник"><div class="wrap" id="watchBody"></div></section>
 </div>
 <nav aria-label="Розділи">
   <button type="button" data-tab="food" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.5"/><path d="M3 4v6M3 10v10M21 4v16"/></svg><span>Калорії</span></button>
   <button type="button" data-tab="gym" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 12h10M5 7v10M8 8v8M16 8v8M19 7v10M2 10v4M22 10v4"/></svg><span>Тренування</span></button>
+  <button type="button" data-tab="watch" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="4"/><path d="M9 6l1-4h4l1 4M9 18l1 4h4l1-4M12 9v3l2 1"/></svg><span>Годинник</span></button>
 </nav>
-<script>
-const SRC = {food: "food/", gym: "gym/"};
-const COLOR = {food: "#2f6f4f", gym: "#1f5fbf"};
-function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
-function load(t) { const f = document.getElementById("f-" + t); if (!f.src) f.src = SRC[t]; return f; }
-function show(t) {
-  if (!SRC[t]) t = "food";
-  for (const k in SRC) {
-    const f = document.getElementById("f-" + k);
-    f.hidden = k !== t;
-    document.querySelector(`[data-tab="${k}"]`).setAttribute("aria-pressed", k === t);
-  }
-  load(t);
-  document.querySelector('meta[name="theme-color"]').content = COLOR[t];
-  document.title = t === "food" ? "Калорії" : "Тренування";
-  store("one-tab", t);
-}
-document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => show(b.dataset.tab)));
-const q = new URLSearchParams(location.search).get("tab");
-const first = SRC[q] ? q : (store("one-tab") || "food");
-show(first);
-// load the other section in the background so switching is instant
-load(first).addEventListener("load", () => setTimeout(() => load(first === "food" ? "gym" : "food"), 300), {once: true});
-if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
-</script>
+<script src="watch.js"></script>
 </body></html>

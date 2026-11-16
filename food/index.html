@@ -254,6 +254,8 @@ tr.cur td{background:var(--accent-soft)}
       <div class="split"></div>
       <div class="line2"><span>Білок <b class="num" id="prot">0</b> з 175 г</span><span id="protHint"></span></div>
       <div class="track"><div class="fill" id="protBar"></div></div>
+      <div class="split" id="watchSplit" hidden></div>
+      <div class="line2" id="watchLine" hidden></div>
     </div>
 
     <section class="card advice" id="advice" hidden><h2>Порада на сьогодні</h2><ul id="adviceList"></ul></section>
@@ -597,6 +599,20 @@ function renderTotals() {
   $("protBar").style.width = Math.min(100, t.prot / TARGET_PROT * 100) + "%";
   const pl = TARGET_PROT - t.prot;
   $("protHint").textContent = pl > 0 ? `добрати ${fmt(pl)} г` : "ціль виконана ✓";
+  showWatch();
+}
+/* steps and burn from the watch (filled automatically by the Android app; hidden elsewhere) */
+function showWatch(w) {
+  if (w === undefined) { try { w = JSON.parse(localStorage.getItem("watch-today") || "null"); } catch (e) { w = null; } }
+  const on = !!(w && w.date === current && (w.steps != null || w.total != null));
+  $("watchLine").hidden = $("watchSplit").hidden = !on;
+  if (!on) return;
+  const t = dayTotals(days[current]);
+  const parts = [];
+  if (w.steps != null) parts.push(`Кроки <b class="num">${fmt(w.steps)}</b>`);
+  if (w.total != null) parts.push(`спалено <b class="num">${fmt(w.total)}</b> ккал`);
+  const bal = w.total != null && t.kcal > 0 ? w.total - t.kcal : null;
+  $("watchLine").innerHTML = `<span>⌚ ${parts.join(" · ")}</span>` + (bal != null ? `<span>${bal >= 0 ? "дефіцит " + fmt(bal) : "перебір " + fmt(-bal)}</span>` : "");
 }
 
 /* ---------- progress view (week, charts, measurements) ---------- */
