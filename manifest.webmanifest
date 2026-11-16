@@ -1,0 +1,21 @@
+{
+ "name": "Щоденник: калорії і тренування",
+ "short_name": "Щоденник",
+ "lang": "uk",
+ "start_url": "./",
+ "scope": "./",
+ "id": "./?app=one",
+ "display": "standalone",
+ "orientation": "portrait",
+ "background_color": "#f3f5f2",
+ "theme_color": "#2f6f4f",
+ "icons": [
+  {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+  {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+  {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+ ],
+ "shortcuts": [
+  {"name": "Калорії", "url": "./?tab=food", "icons": [{"src": "food/icon-192.png", "sizes": "192x192"}]},
+  {"name": "Тренування", "url": "./?tab=gym", "icons": [{"src": "gym/icon-192.png", "sizes": "192x192"}]}
+ ]
+}
