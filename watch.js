@@ -145,6 +145,12 @@
         agg("steps", week, now, "sum"), agg("calories", week, now, "sum"), agg("totalCalories", week, now, "sum"),
         agg("heartRate", today, now, ["average", "min", "max"]), agg("restingHeartRate", week, now, "average")]);
       const S = byDay(steps), A = byDay(active), T = byDay(total), R = byDay(rhr);
+      // Samsung Health does not always hand over "total burned": then total = basal metabolism (by time of day) + active
+      const bmr = bmrPerDay(); let estimated = false;
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(today); d.setDate(d.getDate() - i); const k = ymd(d);
+        if (T[k] == null && A[k] != null) { const frac = i === 0 ? (now - today) / 864e5 : 1; T[k] = bmr * frac + A[k]; estimated = true; }
+      }
       const t = ymd(today);
       const hrToday = hr.find(s => ymd(new Date(s.startDate)) === t);
       const src = await stepSources(today, now);
@@ -172,8 +178,8 @@
       let html = `<h1>Годинник</h1><section class="card"><h2>Сьогодні</h2><div class="stats">
         <div class="stat wide"><span>Кроки</span><b>${fmt(st0)} <span>з 15 000</span></b><div class="bar"><i style="width:${Math.min(100, st0 / 150)}%"></i></div></div>
         <div class="stat"><span>Активні ккал</span><b>${A[t] != null ? fmt(A[t]) : "–"}</b></div>
-        <div class="stat"><span>Спалено ккал</span><b>${burned != null ? fmt(burned) : "–"}</b></div>
-        <div class="stat"><span>Пульс спокою</span><b>${R[t] != null ? fmt(R[t]) : "–"}</b></div>
+        <div class="stat"><span>Спалено${estimated ? " ≈" : ""}</span><b>${burned != null ? fmt(burned) : "–"}</b></div>
+        ${R[t] != null ? `<div class="stat"><span>Пульс спокою</span><b>${fmt(R[t])}</b></div>` : ""}
         <div class="stat"><span>Пульс сер.</span><b>${hrToday ? fmt(hrToday.values.average || hrToday.value) : "–"}</b>${hrToday && hrToday.values.max ? `<span>${fmt(hrToday.values.min)}–${fmt(hrToday.values.max)}</span>` : ""}</div>
         ${sleepMin ? `<div class="stat"><span>Сон</span><b>${Math.floor(sleepMin / 60)}:${String(Math.round(sleepMin % 60)).padStart(2, "0")}</b></div>` : ""}
       </div></section>`;
@@ -181,7 +187,7 @@
         const diff = burned - eaten;
         html += `<section class="card"><h2>Баланс сьогодні</h2><p>З'їдено ${fmt(eaten)} ккал, спалено ${fmt(burned)} ккал (з годинника, до цієї хвилини).</p>
           <p><b class="${diff >= 0 ? "ok" : "err"}">${diff >= 0 ? "Дефіцит " + fmt(diff) : "Перебір " + fmt(-diff)} ккал</b></p>
-          <p>Вечір ще попереду, тож дефіцит до кінця дня зазвичай ще трохи зросте.</p></section>`;
+          ${estimated ? "<p>Спалено пораховано так: базовий обмін за вашою вагою, ростом і віком плюс активні калорії з годинника.</p>" : ""}<p>Вечір ще попереду, тож дефіцит до кінця дня зазвичай ще трохи зросте.</p></section>`;
       }
       const NAMES = {steps: "кроки", calories: "активні калорії", totalCalories: "спалені калорії", heartRate: "пульс", restingHeartRate: "пульс спокою", sleep: "сон", workouts: "тренування"};
       const missing = READ.filter(k => !ok.includes(k));
@@ -222,6 +228,13 @@
       wireTransfer();
     } finally { busy = false; }
   }
+  function bmrPerDay() {
+    // Mifflin-St Jeor for Oleksandr (male, 176 cm, born 1988), with the latest weight from the calorie diary
+    let w = 132;
+    try { const db = JSON.parse(localStorage.getItem("shchodennyk-db-food") || "{}"); const ks = Object.keys(db).filter(k => k.startsWith("days/") && parseFloat(db[k].weight) > 0).sort(); if (ks.length) w = parseFloat(db[ks[ks.length - 1]].weight); } catch (e) {}
+    const age = new Date().getFullYear() - 1988 - (new Date() < new Date(new Date().getFullYear(), 9, 26) ? 1 : 0);
+    return 10 * w + 6.25 * 176 - 5 * age + 5;
+  }
   /* steps per source from raw records: shows sync lag and lets us use the fullest source if Health Connect's merge picked a smaller one */
   function srcName(p) { return /shealth|samsung/i.test(p) ? "Samsung Health" : /fit/i.test(p) ? "Google Fit" : p; }
   async function stepSources(from, to) {
@@ -251,7 +264,9 @@
       const pick = arr => { const x = arr.find(v => ymd(new Date(v.startDate)) === t); return x ? Math.round(x.value) : null; };
       const src = await stepSources(today, now);
       const steps = Math.max(pick(s) || 0, src.best) || null;
-      const data = {date: t, steps, active: pick(a), total: pick(tot), at: now.toISOString()};
+      let total = pick(tot); const active = pick(a);
+      if (total == null && active != null) total = Math.round(bmrPerDay() * (now - today) / 864e5 + active);
+      const data = {date: t, steps, active, total, at: now.toISOString()};
       store("watch-today", JSON.stringify(data));
       const w = $("f-food").contentWindow;
       if (w && typeof w.showWatch === "function") w.showWatch(data);
