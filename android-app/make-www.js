@@ -5,6 +5,10 @@ fs.rmSync(out, {recursive: true, force: true});
 fs.mkdirSync(out);
 for (const f of ["index.html", "watch.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"]) fs.copyFileSync(path.join(root, f), path.join(out, f));
 for (const d of ["food", "gym"]) fs.cpSync(path.join(root, d), path.join(out, d), {recursive: true, filter: src => !src.endsWith("sw.js")});
+// Capacitor's JS runtime (registerPlugin) goes in front of the shell script.
+fs.copyFileSync(path.join(__dirname, "node_modules/@capacitor/core/dist/capacitor.js"), path.join(out, "capacitor.js"));
+const idx = path.join(out, "index.html");
+fs.writeFileSync(idx, fs.readFileSync(idx, "utf8").replace('<script src="watch.js"></script>', '<script src="capacitor.js"></script><script src="watch.js"></script>'));
 fs.writeFileSync(path.join(out, "privacypolicy.html"), `<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Конфіденційність</title></head><body style="font:16px/1.5 sans-serif;padding:16px;max-width:600px;margin:auto">
 <h1>Конфіденційність</h1><p>«Щоденник» читає з Health Connect кроки, пульс, спалені калорії, сон і тренування, щоб показати їх у застосунку поруч із калоріями і тренуваннями.</p>
 <p>Дані зберігаються тільки на цьому телефоні. Застосунок нічого не записує в Health Connect і нікуди не відправляє дані про здоров'я.</p>

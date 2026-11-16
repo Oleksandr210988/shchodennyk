@@ -81,7 +81,8 @@
   /* ---------- watch view ---------- */
   const READ = ["steps", "calories", "totalCalories", "heartRate", "restingHeartRate", "sleep", "workouts"];
   const WTYPE = {strengthTraining: "Силове тренування", traditionalStrengthTraining: "Силове тренування", functionalStrengthTraining: "Функціональне", weightlifting: "Важка атлетика", cycling: "Велосипед", bikingStationary: "Велотренажер", walking: "Ходьба", running: "Біг", runningTreadmill: "Бігова доріжка", hiking: "Похід", elliptical: "Еліпс", rowingMachine: "Гребний тренажер", swimming: "Плавання", swimmingPool: "Басейн", stairClimbingMachine: "Степер", highIntensityIntervalTraining: "Інтервальне (HIIT)", yoga: "Йога", stretching: "Розтяжка", calisthenics: "Вправи з власною вагою", other: "Інше тренування"};
-  const Health = NATIVE && window.Capacitor.registerPlugin ? window.Capacitor.registerPlugin("Health") : null;
+  const Health = !NATIVE ? null
+    : (window.Capacitor.Plugins && window.Capacitor.Plugins.Health) || (window.Capacitor.registerPlugin ? window.Capacitor.registerPlugin("Health") : null);
   let busy = false;
 
   function dayStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -105,8 +106,8 @@
 
   async function renderWatch() {
     const body = $("watchBody");
-    if (!NATIVE) {
-      body.innerHTML = `<h1>Годинник</h1><section class="card"><p>Кроки, пульс і спалені калорії з Galaxy Watch видно в Android-версії застосунку «Щоденник». У браузері телефон не дає до них доступу.</p></section>` + transferCard();
+    if (!NATIVE || !Health) {
+      body.innerHTML = `<h1>Годинник</h1><section class="card"><p>${NATIVE ? "Модуль годинника не завантажився. Оновіть застосунок за посиланням з чату." : ""}Кроки, пульс і спалені калорії з Galaxy Watch видно в Android-версії застосунку «Щоденник». У браузері телефон не дає до них доступу.</p></section>` + transferCard();
       wireTransfer();
       return;
     }
