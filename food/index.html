@@ -119,8 +119,13 @@ h2{font-size:18px;margin:0;text-wrap:balance}
 .meal{padding:0;gap:0;overflow:hidden}
 .mhead{display:flex;align-items:center;gap:10px;padding:12px 12px 10px 16px}
 .mhead .t{flex:1;min-width:0}
-.mhead .t small{display:block;font-size:13px;color:var(--muted);font-family:var(--font-num)}
+.mhead .t small{display:block;font-size:14px;color:var(--muted);margin-top:2px}
 .plus{flex:none;height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--fg);font-weight:600;font-size:15px}
+.mtog{border:0;background:none;text-align:left;padding:0;cursor:pointer}
+.mtog[disabled]{cursor:default}
+.mtog h2{display:flex;align-items:center;gap:8px}
+.mtog .chev{font-size:14px;color:var(--muted)}
+.mtog small b{color:var(--fg);font-family:var(--font-num)}
 .item{display:grid;grid-template-columns:1fr auto;gap:2px 12px;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:12px 16px;min-height:56px}
 .item .n{min-width:0;overflow-wrap:anywhere;font-size:15px}
 .item .k{text-align:right;font-family:var(--font-num);font-weight:600}
@@ -555,6 +560,7 @@ function dateLabel() {
   if (current === iso(y)) return `Вчора, ${base}`;
   return `${DOWF[d.getDay()][0].toUpperCase() + DOWF[d.getDay()].slice(1)}, ${base}`;
 }
+const openMeals = new Set();
 function renderMeals() {
   const d = day(current);
   $("meals").innerHTML = MEALS.map(m => {
@@ -564,7 +570,8 @@ function renderMeals() {
       const c = entryCalc(e); k += c.kcal; p += c.prot;
       return `<button class="item" type="button" data-edit="${esc(e.id)}"><span class="n">${esc(shortName(e))}</span><span class="k">${fmt(c.kcal)}</span><span class="a">${amtText(e)}</span><span class="p">${fmt(c.prot)} г білка</span></button>`;
     }).join("");
-    return `<section class="card meal"><div class="mhead"><div class="t"><h2>${m.name}</h2><small>${m.time ? m.time + " · " : ""}${list.length ? `${fmt(k)} ккал · ${fmt(p)} г білка` : "порожньо"}</small></div><button class="plus" type="button" data-add="${m.id}" aria-label="Додати в ${m.name}">+ Додати</button></div>${rows || ""}</section>`;
+    const open = openMeals.has(m.id) && list.length;
+    return `<section class="card meal"><div class="mhead"><button class="t mtog" type="button" data-mtog="${m.id}" aria-expanded="${!!open}" ${list.length ? "" : "disabled"}><h2>${m.name}${list.length ? `<span class="chev">${open ? "▴" : "▾"}</span>` : ""}</h2><small>${list.length ? `<b>${fmt(k)} ккал</b> · ${fmt(p)} г білка` : (m.time ? m.time + " · " : "") + "порожньо"}</small></button><button class="plus" type="button" data-add="${m.id}" aria-label="Додати в ${m.name}">+ Додати</button></div>${open ? rows : ""}</section>`;
   }).join("");
 }
 function renderTotals() {
@@ -781,7 +788,7 @@ function render() {
   drawWeight();
   renderMeas();
 }
-function go(date) { current = date; render(); }
+function go(date) { if (date !== current) openMeals.clear(); current = date; render(); }
 
 /* ---------- advice ---------- */
 const SWEET = "Багато цукру й жиру, а білка майже немає, тому швидко захочеться їсти знову. Краще: рікота з бананом і чайною ложкою меду, желе або яблуко.";
@@ -1126,6 +1133,7 @@ document.addEventListener("click", ev => {
   const b = ev.target.closest("button, [data-close]"); if (!b) return;
   if (b.dataset.close) return closeSheet();
   if (b.dataset.add) return openSheet(b.dataset.add);
+  if (b.dataset.mtog) { const id = b.dataset.mtog; openMeals.has(id) ? openMeals.delete(id) : openMeals.add(id); return renderMeals(); }
   if (b.dataset.edit) return openEdit(b.dataset.edit);
   if (b.dataset.meal) { sh.meal = b.dataset.meal; renderChips(); if (sh.mode === "add" && !$("stepPick").hidden) renderFoodList(); return; }
   if (b.dataset.cat !== undefined) { sh.cat = b.dataset.cat; $("q").value = ""; renderFoodList(); $("shBody").scrollTop = 0; return; }
