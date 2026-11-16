@@ -1,4 +1,4 @@
-const CACHE = "one-v3";
+const CACHE = "one-v4";
 const CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "watch.js", "food/", "gym/"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("one-") && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

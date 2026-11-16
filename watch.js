@@ -147,6 +147,8 @@
       const S = byDay(steps), A = byDay(active), T = byDay(total), R = byDay(rhr);
       const t = ymd(today);
       const hrToday = hr.find(s => ymd(new Date(s.startDate)) === t);
+      const src = await stepSources(today, now);
+      if (src.best > (S[t] || 0)) S[t] = src.best;
       let sleepMin = null;
       try {
         const from = new Date(today); from.setHours(-12);
@@ -194,7 +196,9 @@
           <div class="r"><b>${Math.round(w.duration / 60)} хв</b><small>${w.totalEnergyBurned ? fmt(w.totalEnergyBurned) + " ккал" : ""}${w.avgHr ? " · пульс " + fmt(w.avgHr) + (w.maxHr ? "/" + fmt(w.maxHr) : "") : ""}</small></div></div>`;
       }
       html += `</section><section class="card"><button class="btn" id="refresh" type="button">Оновити</button><button class="btn sec" id="hcSet" type="button">Налаштування Health Connect</button>
-        <p>Годинник передає дані в Samsung Health, а той у Health Connect. Іноді це займає кілька хвилин.</p></section>` + transferCard();
+        <p>Годинник передає дані в Samsung Health, а той у Health Connect. Samsung Health робить це не одразу, а раз на якийсь час. Щоб підтягнути свіжі кроки, відкрийте Samsung Health на кілька секунд, поверніться сюди і натисніть «Оновити».</p>
+        ${src.last ? `<p>Останні кроки в Health Connect: о ${src.last.toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"})}.</p>` : ""}
+        ${src.list.length ? `<p>Джерела кроків сьогодні: ${src.list.map(x => esc(srcName(x.name)) + " " + fmt(x.sum)).join(", ")}.</p>` : ""}</section>` + transferCard();
       body.innerHTML = html;
       $("refresh").onclick = () => { busy = false; renderWatch(); };
       $("hcSet").onclick = () => Health.openHealthConnectSettings().catch(() => {});
@@ -205,6 +209,24 @@
       wireTransfer();
     } finally { busy = false; }
   }
+  /* steps per source from raw records: shows sync lag and lets us use the fullest source if Health Connect's merge picked a smaller one */
+  function srcName(p) { return /shealth|samsung/i.test(p) ? "Samsung Health" : /fit/i.test(p) ? "Google Fit" : p; }
+  async function stepSources(from, to) {
+    const res = {best: 0, last: null, list: []};
+    try {
+      const r = await Health.readSamples({dataType: "steps", startDate: from.toISOString(), endDate: to.toISOString(), limit: 5000});
+      const m = {};
+      for (const x of r.samples || []) {
+        const k = x.sourceId || x.sourceName || "?";
+        m[k] = (m[k] || 0) + (x.value || 0);
+        const e = new Date(x.endDate); if (!res.last || e > res.last) res.last = e;
+      }
+      res.list = Object.entries(m).map(([name, sum]) => ({name, sum})).sort((a, b) => b.sum - a.sum);
+      res.best = res.list.length ? Math.round(res.list[0].sum) : 0;
+    } catch (e) {}
+    return res;
+  }
+
   /* ---------- automatic sync: today's steps and burn go to the calorie page without any taps ---------- */
   async function syncToday() {
     if (!Health) return;
@@ -214,7 +236,9 @@
       const now = new Date(), today = dayStart(now), t = ymd(today);
       const [s, a, tot] = await Promise.all([agg("steps", today, now, "sum"), agg("calories", today, now, "sum"), agg("totalCalories", today, now, "sum")]);
       const pick = arr => { const x = arr.find(v => ymd(new Date(v.startDate)) === t); return x ? Math.round(x.value) : null; };
-      const data = {date: t, steps: pick(s), active: pick(a), total: pick(tot), at: now.toISOString()};
+      const src = await stepSources(today, now);
+      const steps = Math.max(pick(s) || 0, src.best) || null;
+      const data = {date: t, steps, active: pick(a), total: pick(tot), at: now.toISOString()};
       store("watch-today", JSON.stringify(data));
       const w = $("f-food").contentWindow;
       if (w && typeof w.showWatch === "function") w.showWatch(data);
