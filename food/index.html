@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="uk" data-app="food"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Калорії</title>
+<meta name="theme-color" content="#2f6f4f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Калорії">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<script>/* Local on-device store with the same small API the diary pages use (collection/doc, set, delete, onSnapshot). Data stays on this phone. */
+(function(){
+  const KEY = "shchodennyk-db-" + (document.documentElement.dataset.app || "app");
+  let store = {};
+  try { store = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { store = {}; }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+  const colSubs = {}, docSubs = {};
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { alertQuota(); } };
+  function alertQuota(){ const s = document.getElementById("status"); if (s) s.textContent = "Пам'ять телефона переповнена"; }
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const colOf = path => path.split("/").slice(0, -1).join("/");
+  const snapCol = c => ({docs: Object.keys(store).filter(p => colOf(p) === c).map(p => ({id: p.split("/").pop(), exists: true, data: () => clone(store[p])}))});
+  const snapDoc = p => ({id: p.split("/").pop(), exists: p in store, data: () => p in store ? clone(store[p]) : undefined});
+  function notify(path){
+    const c = colOf(path);
+    (colSubs[c] || []).forEach(cb => setTimeout(() => cb(snapCol(c)), 0));
+    (docSubs[path] || []).forEach(cb => setTimeout(() => cb(snapDoc(path)), 0));
+  }
+  function docRef(path){
+    return {
+      set: async data => { store[path] = clone(data); save(); notify(path); },
+      delete: async () => { delete store[path]; save(); notify(path); },
+      get: async () => snapDoc(path),
+      onSnapshot: cb => { (docSubs[path] = docSubs[path] || []).push(cb); setTimeout(() => cb(snapDoc(path)), 0); return () => {}; }
+    };
+  }
+  const DB = {
+    doc: path => docRef(path),
+    collection: c => ({
+      doc: id => docRef(c + "/" + id),
+      onSnapshot: cb => { (colSubs[c] = colSubs[c] || []).push(cb); setTimeout(() => cb(snapCol(c)), 0); return () => {}; }
+    })
+  };
+  window.APPDB = {
+    importDocs: async docs => { let n = 0; Object.entries(docs).forEach(([p, d]) => { if (p && d && typeof d === "object") { store[p] = clone(d); n++; } }); save(); return n; },
+    count: () => Object.keys(store).length
+  };
+  window.claude = {use: async name => name === "db" ? DB : null};
+  if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+})();
+</script>
+</head><body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: phone-first app. Sticky date bar on top, day summary, meals; bottom tab bar with a big "Додати їжу" button that opens a full-height sheet (pick product -> amount -> add) */
+:root{
+  --bg:#f3f5f2; --card:#ffffff; --fg:#1d2420; --muted:#5f6b64; --line:#dde3de;
+  --accent:#2f6f4f; --accent-ink:#ffffff; --accent-soft:#e1efe6; --warn:#b4541a; --warn-soft:#fbe9dc;
+  --scrim:rgba(20,25,22,.45);
+  --font-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141917; --card:#1c2320; --fg:#e6ebe7; --muted:#9aa69f; --line:#2c3531;
+  --accent:#7cc39c; --accent-ink:#0f1d15; --accent-soft:#22362b; --warn:#f0a06a; --warn-soft:#3a2a1f; --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --card:#1c2320; --fg:#e6ebe7; --muted:#9aa69f; --line:#2c3531;
+  --accent:#7cc39c; --accent-ink:#0f1d15; --accent-soft:#22362b; --warn:#f0a06a; --warn-soft:#3a2a1f; --scrim:rgba(0,0,0,.6); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--card)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.in{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* top date bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
+.top .in{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;gap:8px;padding-block:8px}
+.icon{width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:var(--bg);font-size:26px;line-height:1;display:grid;place-items:center}
+.datebtn{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:52px;border-radius:14px;text-align:center}
+.datebtn b{font-size:19px}
+.datebtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;cursor:pointer}
+#status{font-size:12px;color:var(--muted)}
+#status.err{color:var(--warn)}
+
+main .in{padding-block:14px calc(120px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+h2{font-size:18px;margin:0;text-wrap:balance}
+.hint{font-size:13px;color:var(--muted);margin:0}
+
+/* day summary */
+.big{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.big .lbl{font-size:15px;color:var(--muted);width:100%}
+.big .val{font-size:44px;font-weight:600;line-height:1}
+.big .unit{font-size:16px;color:var(--muted)}
+.big.over .val{color:var(--warn)}
+.track{height:12px;border-radius:6px;background:var(--line);overflow:hidden}
+.fill{height:100%;width:0;background:var(--accent);border-radius:6px;transition:width .25s}
+.fill.over{background:var(--warn)}
+.line2{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:var(--muted);flex-wrap:wrap}
+.line2 b{color:var(--fg);font-weight:600}
+.split{height:1px;background:var(--line);margin:4px 0}
+
+.toggle{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px 16px;border-radius:18px;border:1px solid var(--line);background:var(--card);text-align:left;font-weight:600;font-size:17px}
+.toggle .box{width:30px;height:30px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;font-size:18px;flex:none;color:transparent}
+.toggle[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.toggle[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.toggle small{display:block;font-weight:400;font-size:13px;color:var(--muted)}
+
+/* meals */
+.meal{padding:0;gap:0;overflow:hidden}
+.mhead{display:flex;align-items:center;gap:10px;padding:12px 12px 10px 16px}
+.mhead .t{flex:1;min-width:0}
+.mhead .t small{display:block;font-size:13px;color:var(--muted);font-family:var(--font-num)}
+.plus{flex:none;height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--fg);font-weight:600;font-size:15px}
+.item{display:grid;grid-template-columns:1fr auto;gap:2px 12px;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:12px 16px;min-height:56px}
+.item .n{min-width:0;overflow-wrap:anywhere;font-size:15px}
+.item .k{text-align:right;font-family:var(--font-num);font-weight:600}
+.item .a{font-size:13px;color:var(--muted)}
+.item .p{text-align:right;font-size:13px;color:var(--muted);font-family:var(--font-num)}
+.item:active{background:var(--accent-soft)}
+.mempty{border-top:1px solid var(--line);padding:12px 16px;font-size:14px;color:var(--muted)}
+
+/* friday */
+.meas{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.meas label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:14px;min-width:0}
+.meas label span{font-weight:400;font-size:12px;color:var(--muted)}
+.meas label.wide{grid-column:1/-1}
+.field{width:100%;min-width:0;height:52px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:0 12px;font-size:20px;font-family:var(--font-num)}
+
+/* progress view */
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:8px 8px;border-top:1px solid var(--line);white-space:nowrap;font-size:14px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;border-top:none}
+td.r,th.r{text-align:right}
+tr.cur td{background:var(--accent-soft)}
+.scroll{overflow-x:auto;margin:0 -16px;padding:0 16px}
+.up{color:var(--warn)} .down{color:var(--accent)}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart text{fill:var(--muted);font-family:var(--font-num);font-size:11px}
+.chart text.ref{fill:var(--fg)}
+
+/* bottom tab bar */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabbar .in{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:8px;padding-block:8px}
+.tab{height:58px;border-radius:14px;border:0;background:none;color:var(--muted);font-weight:600;font-size:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--accent);background:var(--accent-soft)}
+.addbig{height:58px;border-radius:16px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;gap:8px}
+.addbig span{font-size:28px;line-height:1;font-weight:500}
+
+/* sheet */
+.sheet{position:fixed;inset:0;z-index:20}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.panel{position:absolute;left:0;right:0;bottom:0;top:calc(env(safe-area-inset-top,0px) + 24px);background:var(--bg);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden;max-width:680px;margin:0 auto}
+.sh-head{display:flex;align-items:center;gap:8px;padding:12px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
+.sh-head h2{flex:1;font-size:20px}
+.sh-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:42px;padding:0 14px;border-radius:21px;border:1px solid var(--line);background:var(--card);font-size:15px;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.search{width:100%;height:54px;border-radius:14px;border:1px solid var(--line);background:var(--card);padding:0 16px;font-size:17px}
+.glabel{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin:6px 0 -6px}
+.flist{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.food{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:56px;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:10px 16px;font-size:15px}
+.food:first-child{border-top:0}
+.food span:first-child{min-width:0;overflow-wrap:anywhere}
+.food small{flex:none;color:var(--muted);font-family:var(--font-num);font-size:12px;text-align:right}
+.food:active{background:var(--accent-soft)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{display:flex;flex-direction:column;justify-content:space-between;gap:6px;min-height:84px;text-align:left;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--card);min-width:0}
+.tile b{font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.tile small{font-size:12px;color:var(--muted)}
+.tile:active{background:var(--accent-soft)}
+.tile.cat{background:var(--accent-soft);border-color:transparent}
+.repeat{display:flex;flex-direction:column;gap:4px;text-align:left;padding:14px 16px;border-radius:16px;border:2px solid var(--accent);background:var(--card);width:100%}
+.repeat span{font-weight:700;font-size:16px;color:var(--accent)}
+.repeat small{font-size:13px;color:var(--muted)}
+.tip{border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.4;margin:0}
+.tip.bad{background:var(--warn-soft);border:1px solid var(--warn)}
+.tip.good{background:var(--accent-soft);border:1px solid var(--accent)}
+.tip b{display:block;font-size:13px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.tip.bad b{color:var(--warn)} .tip.good b{color:var(--accent)}
+.advice{display:flex;flex-direction:column;gap:8px}
+.advice ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.measbtn{height:52px;border-radius:14px;border:1px solid var(--accent);background:var(--accent-soft);font-weight:600;width:100%}
+.bk{display:grid;gap:8px}
+.bk .row{display:flex;flex-wrap:wrap;gap:8px}
+.bk button{height:48px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:600;padding:0 14px;flex:1 1 160px}
+.bk textarea{width:100%;min-height:90px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:10px;font-size:13px}
+.bk .msg{font-size:14px;margin:0}
+.fname{font-size:19px;font-weight:600;text-wrap:balance;margin:0}
+.link{align-self:flex-start;border:0;background:none;color:var(--accent);font-weight:600;padding:6px 0;font-size:15px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px}
+.seg button{height:46px;border:0;border-radius:10px;background:none;font-size:16px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.amt{display:grid;grid-template-columns:64px 1fr 64px;gap:8px}
+.amt button{height:64px;border-radius:14px;border:1px solid var(--line);background:var(--card);font-size:30px;line-height:1}
+.amt input{width:100%;min-width:0;height:64px;border-radius:14px;border:2px solid var(--accent);background:var(--card);text-align:center;font-size:30px;font-family:var(--font-num);font-weight:600}
+.quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
+.quick button{height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-family:var(--font-num);font-size:15px}
+.calc{background:var(--accent-soft);border-radius:14px;padding:12px 16px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.calc b{font-size:26px;font-family:var(--font-num)}
+.custom{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.custom label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+.custom label.wide{grid-column:1/-1}
+.custom input{width:100%;min-width:0;height:50px;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 12px;font-size:17px}
+.primary{height:60px;border-radius:16px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:18px;width:100%}
+.danger{height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--warn);font-weight:600;width:100%}
+.danger.sure{background:var(--warn);border-color:var(--warn);color:var(--card)}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+@media (min-width:700px){.meas{grid-template-columns:repeat(4,1fr)}.meas label.wide{grid-column:1/-1}}
+</style>
+
+<header class="top"><div class="in">
+  <button class="icon" id="prev" type="button" aria-label="Попередній день">‹</button>
+  <label class="datebtn" for="date"><b id="dateLbl">Сьогодні</b><span id="status">Завантаження…</span><input type="date" id="date" aria-label="Вибрати дату"></label>
+  <button class="icon" id="next" type="button" aria-label="Наступний день">›</button>
+</div></header>
+
+<main><div class="in">
+  <section id="vDay" style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <div class="big" id="bigK"><span class="lbl" id="kLbl">Можна ще з'їсти</span><span class="val num" id="kLeft">2 400</span><span class="unit">ккал</span></div>
+      <div class="track"><div class="fill" id="kcalBar"></div></div>
+      <div class="line2"><span>З'їдено <b class="num" id="kcal">0</b> з 2 400 ккал</span></div>
+      <div class="split"></div>
+      <div class="line2"><span>Білок <b class="num" id="prot">0</b> з 175 г</span><span id="protHint"></span></div>
+      <div class="track"><div class="fill" id="protBar"></div></div>
+    </div>
+
+    <section class="card advice" id="advice" hidden><h2>Порада на сьогодні</h2><ul id="adviceList"></ul></section>
+
+    <button class="toggle" id="creatine" type="button" aria-pressed="false"><span class="box" aria-hidden="true">✓</span><span>Креатин 5 г<small id="creaHint">Натисни, коли випив</small></span></button>
+
+    <section class="card" id="friCard">
+      <h2 id="measTitle">Вага і заміри <span class="hint" id="measDate" style="display:inline"></span></h2>
+      <div class="meas" id="measIn"><label class="wide">Вага, кг <span>зранку натще, після туалету</span><input class="field" id="weight" type="number" step="0.1" min="0" inputmode="decimal" placeholder="кг"></label></div>
+      <p class="hint">Раз на 2 тижні, в суботу зранку натщесерце, після туалету. Сантиметр не затягуй, міряй стоячи на видиху. Історія на вкладці «Прогрес».</p>
+    </section>
+
+    <div id="meals" style="display:flex;flex-direction:column;gap:12px"></div>
+  </section>
+
+  <section id="vProg" hidden style="display:flex;flex-direction:column;gap:14px">
+    <section class="card">
+      <h2>Цей тиждень</h2>
+      <p class="hint">Натисни на день, щоб відкрити його.</p>
+      <div class="scroll"><table>
+        <thead><tr><th>День</th><th class="r">ккал</th><th class="r">Білок</th><th class="r">Дефіцит</th><th class="r">Креатин</th></tr></thead>
+        <tbody id="week"></tbody><tfoot id="weekFoot"></tfoot>
+      </table></div>
+    </section>
+    <section class="card chart"><h2>Калорії по днях</h2><p class="hint">Стовпчик вище лінії «ціль 2400» означає перебір за день.</p><div id="chartKcal"></div></section>
+    <section class="card chart"><h2>Дефіцит за тиждень</h2><p class="hint" id="defHint"></p><div id="chartDef"></div></section>
+    <section class="card chart"><h2>Вага</h2><p class="hint" id="wHint"></p><div id="chartWeight"></div><p class="hint">Вага на початок тижня: <b class="num" id="wStart">132</b> кг</p></section>
+    <section class="card">
+      <h2>Заміри</h2>
+      <p class="hint" id="nextMeas"></p>
+      <button class="measbtn" id="measNow" type="button">Внести вагу і заміри сьогодні</button>
+      <div class="scroll"><table><thead><tr><th>Дата</th><th class="r">Вага</th><th class="r">Верх живота</th><th class="r">Низ живота</th><th class="r">Талія</th><th class="r">Груди</th></tr></thead><tbody id="measHist"></tbody></table></div>
+      <p class="hint">У дужках зміна відносно попереднього заміру, в останньому рядку зміна від старту.</p>
+    </section>
+<section class="card bk" id="bk">
+  <h2>Мої записи</h2>
+  <p class="hint muted" id="bkInfo" style="margin:0;font-size:13px"></p>
+  <div class="row" id="bkClaude"><button type="button" id="bkCopy">Скопіювати всі записи</button></div>
+  <div class="row" id="bkApp" hidden>
+    <button type="button" id="bkSave">Зберегти копію у файл</button>
+    <button type="button" id="bkShare">Надіслати копію</button>
+    <label style="flex:1 1 160px;display:grid"><input type="file" id="bkFile" accept=".json,application/json,text/plain" hidden><span class="bkfile" style="height:48px;border-radius:12px;border:1px solid var(--line);display:grid;place-items:center;font-weight:600;cursor:pointer">Відновити з файлу</span></label>
+  </div>
+  <div id="bkPasteBox" hidden style="display:grid;gap:8px">
+    <textarea id="bkPaste" placeholder="Встав сюди скопійовані записи (довге натискання → Вставити)" aria-label="Скопійовані записи"></textarea>
+    <button type="button" id="bkImport">Перенести записи</button>
+  </div>
+  <p class="msg" id="bkMsg" aria-live="polite"></p>
+</section>
+    <p class="hint">Продукти рахуються за вагою в тому вигляді, в якому ти їх зважуєш: суха крупа, сире м'ясо або вже готове (так і написано в назві).</p>
+  </section>
+</div></main>
+
+<nav class="tabbar" aria-label="Розділи"><div class="in">
+  <button class="tab" id="tabDay" type="button" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>День</button>
+  <button class="addbig" id="addBtn" type="button"><span>+</span>Додати їжу</button>
+  <button class="tab" id="tabProg" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16M6 15l4-5 4 3 5-7"/></svg>Прогрес</button>
+</div></nav>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="scrim" data-close="1"></div>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+    <div class="sh-head"><h2 id="shTitle">Додати їжу</h2><button class="icon" type="button" data-close="1" aria-label="Закрити">✕</button></div>
+    <div class="sh-body" id="shBody">
+      <div class="chips" id="mealChips" role="group" aria-label="Прийом їжі"></div>
+      <div id="stepPick" style="display:flex;flex-direction:column;gap:14px">
+        <input class="search" id="q" type="search" placeholder="🔍 Пошук: курка, яйце, банан…" autocomplete="off" enterkeyhint="search" aria-label="Пошук продукту">
+        <div id="foodList" style="display:flex;flex-direction:column;gap:14px"></div>
+      </div>
+      <div id="stepAmt" hidden style="display:flex;flex-direction:column;gap:14px">
+        <button class="link" id="back" type="button">‹ Інший продукт</button>
+        <p class="fname" id="fName"></p>
+        <p class="tip" id="tip" hidden></p>
+        <div class="custom" id="customBox" hidden>
+          <label class="wide">Назва<input id="cName" placeholder="Напр. йогурт" autocomplete="off"></label>
+          <label>ккал у 100 г<input id="cK" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>білок у 100 г<input id="cP" type="number" min="0" step="any" inputmode="decimal"></label>
+          <p class="hint" style="grid-column:1/-1">Цифри з етикетки «на 100 г», а нижче скільки грамів з'їв.</p>
+        </div>
+        <div class="seg" id="units" role="group" aria-label="Одиниця"></div>
+        <div class="amt">
+          <button type="button" id="minus" aria-label="Менше">−</button>
+          <input id="amt" type="number" min="0" step="any" inputmode="decimal" aria-label="Кількість">
+          <button type="button" id="plus" aria-label="Більше">+</button>
+        </div>
+        <div class="quick" id="quick"></div>
+        <div class="calc"><b id="cKcal">0 ккал</b><span class="muted" id="cProt">0 г білка</span></div>
+        <button class="primary" id="save" type="button">Додати</button>
+        <button class="danger" id="del" type="button" hidden>Видалити</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TARGET_KCAL = 2400, TARGET_PROT = 175, MAINT = 3450;
+const MEALS = [
+  {id:"breakfast", name:"Сніданок", time:"05:20"},
+  {id:"snack1", name:"Перекус", time:"09:00"},
+  {id:"lunch", name:"Обід", time:"12:00"},
+  {id:"snack", name:"Перекус перед залом", time:"17:30"},
+  {id:"dinner", name:"Вечеря після тренування", time:"~20:00"},
+  {id:"extra", name:"Солодке та понад план", time:""}
+];
+const MEAL = Object.fromEntries(MEALS.map(m => [m.id, m]));
+// k = ккал, p = білок на 100 г; piece = вага однієї штуки в грамах
+const FOODS = [
+  {g:"М'ясо і риба (сирі)", id:"chicken", n:"Куряче філе, сире", k:110, p:23},
+  {g:"М'ясо і риба (сирі)", id:"turkey", n:"Індичка, філе, сире", k:115, p:24},
+  {g:"М'ясо і риба (сирі)", id:"beef", n:"Яловичина пісна, сира", k:150, p:21},
+  {g:"М'ясо і риба (сирі)", id:"porkloin", n:"Свиняча вирізка, сира", k:142, p:21},
+  {g:"М'ясо і риба (сирі)", id:"porkfat", n:"Свинина жирна (шия), сира", k:270, p:16},
+  {g:"М'ясо і риба (сирі)", id:"fish", n:"Біла риба, сира", k:80, p:18},
+  {g:"М'ясо і риба (готові)", id:"cchicken", n:"Куряча грудка готова (варена, запечена, аерогриль)", k:165, p:31},
+  {g:"М'ясо і риба (готові)", id:"pistsalami", n:"Ковбаса сиров'ялена з фісташками", k:420, p:23},
+  {g:"М'ясо і риба (готові)", id:"tuna", n:"Тунець у власному соці Great Value, без рідини (1 шт = банка ≈ 100 г)", k:79, p:16, piece:100},
+  {g:"М'ясо і риба (готові)", id:"cturkey", n:"Індичка філе готова", k:150, p:29},
+  {g:"М'ясо і риба (готові)", id:"cbeef", n:"Яловичина пісна готова", k:220, p:30},
+  {g:"М'ясо і риба (готові)", id:"cporkloin", n:"Свиняча вирізка готова", k:190, p:28},
+  {g:"М'ясо і риба (готові)", id:"bakedsmoked", n:"М'ясо запечене, як копчене (свинина, як буженина)", k:250, p:25},
+  {g:"М'ясо і риба (готові)", id:"frbreast", n:"Курка фритюр: грудка (1 шт ≈ 160 г)", k:260, p:23.8, piece:160},
+  {g:"М'ясо і риба (готові)", id:"frwing", n:"Курка фритюр: крилце (1 шт ≈ 45 г)", k:290, p:22, piece:45},
+  {g:"М'ясо і риба (готові)", id:"frleg", n:"Курка фритюр: голінка (1 шт ≈ 70 г)", k:270, p:21, piece:70},
+  {g:"М'ясо і риба (готові)", id:"frthigh", n:"Курка фритюр: стегно (1 шт ≈ 120 г)", k:275, p:18.3, piece:120},
+  {g:"М'ясо і риба (готові)", id:"cfish", n:"Біла риба готова", k:105, p:23},
+  {g:"Готова їжа", id:"buckpork", n:"Гречка зі свининою, готова", k:150, p:11},
+  {g:"Готова їжа", id:"wheatpork", n:"Пшенична каша зі свининою нежирною, готова", k:150, p:9},
+  {g:"Готова їжа", id:"cfries", n:"Картопля фрі готова з аерогриля, без олії (вага готової)", k:185, p:3.4},
+  {g:"Готова їжа", id:"bakedpotato", n:"Картопля ціла в шкірці, печена в аерогрилі, без олії (1 шт = середня ≈ 170 г)", k:93, p:2.5, piece:170, gdef:1},
+  {g:"Готова їжа", id:"cbuck", n:"Гречка варена", k:105, p:4},
+  {g:"Готова їжа", id:"crice", n:"Рис варений", k:130, p:2.7},
+  {g:"Готова їжа", id:"cbulgur", n:"Булгур варений", k:85, p:3},
+  {g:"Готова їжа", id:"ccous", n:"Кус-кус варений", k:112, p:3.8},
+  {g:"Готова їжа", id:"cwheat", n:"Пшенична каша на воді", k:90, p:3},
+  {g:"Готова їжа", id:"cvermi", n:"Вермішель варена", k:115, p:4},
+  {g:"Готова їжа", id:"ducal", n:"Квасоля червона перетерта Ducal (1 шт = порція 130 г)", k:131, p:5.4, piece:130},
+  {g:"Готова їжа", id:"potpancake", n:"Млинець картопляний з пюре, запечений (1 шт ≈ 100 г)", k:140, p:4, piece:100},
+  {g:"Готова їжа", id:"pickles", n:"Огірки мариновані Miguel's (1 шт ≈ 15 г)", k:12, p:0.3, piece:15},
+  {g:"Готова їжа", id:"sauerkraut", n:"Капуста квашена", k:20, p:1},
+  {g:"Готова їжа", id:"cpotato", n:"Картопля варена", k:82, p:2},
+  {g:"Крупи сухі, картопля сира", id:"frozenfries", n:"Картопля фрі морожена, вага замороженої (аерогриль/духовка без олії)", k:129, p:2.4},
+  {g:"Крупи сухі, картопля сира", id:"buck", n:"Гречка, суха", k:330, p:12.6},
+  {g:"Крупи сухі, картопля сира", id:"rice", n:"Рис, сухий", k:345, p:7},
+  {g:"Крупи сухі, картопля сира", id:"bulgur", n:"Булгур, сухий", k:342, p:12},
+  {g:"Крупи сухі, картопля сира", id:"cous", n:"Кус-кус, сухий", k:360, p:12.8},
+  {g:"Крупи сухі, картопля сира", id:"wheat", n:"Пшенична крупа, суха", k:330, p:11},
+  {g:"Крупи сухі, картопля сира", id:"vermi", n:"Вермішель, суха", k:350, p:11},
+  {g:"Крупи сухі, картопля сира", id:"potato", n:"Картопля, сира", k:77, p:2},
+  {g:"Яйця і молочне", id:"egg", n:"Яйце ціле (1 шт ≈ 55 г)", k:143, p:12.6, piece:55},
+  {g:"Яйця і молочне", id:"eggwhite", n:"Білок яєчний (1 шт ≈ 33 г)", k:52, p:10.9, piece:33},
+  {g:"Яйця і молочне", id:"boiledegg", n:"Яйце варене ціле, з жовтком (1 шт ≈ 50 г без шкаралупи)", k:155, p:12.6, piece:50},
+  {g:"Яйця і молочне", id:"boiledwhite", n:"Білок вареного яйця, без жовтка (1 шт ≈ 33 г)", k:52, p:10.9, piece:33},
+  {g:"Яйця і молочне", id:"ricotta", n:"Рікота", k:174, p:11},
+  {g:"Яйця і молочне", id:"milkdel", n:"Молоко Dos Pinos Delactomy 2%, без лактози (1 г = 1 мл; 1 шт = склянка 250 мл)", k:50, p:3.2, piece:250},
+  {g:"Яйця і молочне", id:"silkalm", n:"Напій Silk Alto en Proteína, мигдальний, без цукру (1 г = 1 мл; 1 шт = склянка 250 мл)", k:56.2, p:5.2, piece:250},
+  {g:"Яйця і молочне", id:"condmilk", n:"Згущене молоко El Corte Inglés (1 шт = порція 35 г)", k:322, p:7.9, piece:35, gdef:1},
+  {g:"Яйця і молочне", id:"brynza", n:"Бринза нежирна", k:190, p:20},
+  {g:"Яйця і молочне", id:"mozz", n:"Моцарела терта", k:290, p:22},
+  {g:"Хліб і фрукти", id:"dates", n:"Фініки сушені (1 шт ≈ 8 г)", k:280, p:2.5, piece:8},
+  {g:"Хліб і фрукти", id:"ctortilla", n:"Тортилья кукурудзяна, гватемальська (1 шт ≈ 25 г)", k:218, p:5.7, piece:25},
+  {g:"Хліб і фрукти", id:"tortilla", n:"Тортилья пшенична", k:300, p:8, piece:60},
+  {g:"Хліб і фрукти", id:"banana", n:"Банан (без шкірки)", k:89, p:1.1, piece:120},
+  {g:"Хліб і фрукти", id:"apple", n:"Яблуко червоне (1 шт ≈ 180 г)", k:52, p:0.3, piece:180},
+  {g:"Хліб і фрукти", id:"applegreen", n:"Яблуко зелене (1 шт ≈ 170 г)", k:45, p:0.4, piece:170},
+  {g:"Хліб і фрукти", id:"avocado", n:"Авокадо, м'якоть (1 шт = половинка ≈ 75 г)", k:160, p:2, piece:75},
+  {g:"Хліб і фрукти", id:"mandarin", n:"Мандарин очищений (1 шт ≈ 75 г)", k:53, p:0.8, piece:75},
+  {g:"Хліб і фрукти", id:"kiwi", n:"Ківі зі шкіркою (1 шт ≈ 85 г)", k:61, p:1.1, piece:85},
+  {g:"Солодке та інше", id:"jelly", n:"Желе готове", k:70, p:1.5},
+  {g:"Солодке та інше", id:"wafer", n:"Вафлі", k:530, p:5, piece:16},
+  {g:"Солодке та інше", id:"bar", n:"Батончик шоколадний (≈50 г)", k:480, p:6, piece:50},
+  {g:"Яйця і молочне", id:"butter", n:"Масло вершкове (для смаження)", k:740, p:0.5},
+  {g:"Солодке та інше", id:"bonobon", n:"Батончик БОН БОН (1 шт = 48 г)", k:482, p:5, piece:48},
+  {g:"Солодке та інше", id:"barritas", n:"Печиво Mini Barritas з полуницею (1 шт = 13 г, пачка = 4 шт)", k:461.5, p:3.85, piece:13},
+  {g:"Солодке та інше", id:"icecream", n:"Морозиво La Nevería Café Zumattra Chip (1 шт = порція 85 г)", k:239, p:2.4, piece:85},
+  {g:"Солодке та інше", id:"flan", n:"Флан Castilla ваніль, готовий, на 500 мл молока Delactomy (вносьте в грамах; уся пачка ≈ 600 г)", k:107, p:2.7, piece:150, gdef:1},
+  {g:"Солодке та інше", id:"kartoshka", n:"Тістечко «Картопля» домашнє (1 шт ≈ 40 г)", k:450, p:6.9, piece:40},
+  {g:"Солодке та інше", id:"pbutter", n:"Арахісова паста Country Barn (1 шт = столова ложка ≈ 16 г)", k:563, p:22, piece:16, gdef:1},
+  {g:"Солодке та інше", id:"peanuts", n:"Арахіс Great Value (1 шт = порція 28 г)", k:571, p:25, piece:28, gdef:1},
+  {g:"Солодке та інше", id:"kick", n:"Батончик Kick (1 шт = 14 г = 65 ккал)", k:464, p:8.6, piece:14},
+  {g:"Солодке та інше", id:"honey", n:"Мед домашній (1 шт = чайна ложка ≈ 7 г; столова ≈ 21 г)", k:304, p:0.3, piece:7},
+  {g:"Солодке та інше", id:"brownchz", n:"Брауні-чизкейк банановий домашній, 20 г цукру (1 шт = увесь ≈ 380 г)", k:139, p:10, piece:380, gdef:1},
+  {g:"Солодке та інше", id:"chocsponge", n:"Бісквіт шоколадний домашній, без крему (1 шт = шматок ≈ 80 г)", k:340, p:7, piece:80, gdef:1},
+  {g:"Солодке та інше", id:"cake", n:"Торт з кремом (1 шт = шматок ≈ 100 г)", k:350, p:5, piece:100},
+  {g:"Солодке та інше", id:"mymotto", n:"Вафля My Motto Cocoa (1 шт = пачка 30 г)", k:532, p:5, piece:30},
+  {g:"Солодке та інше", id:"dianachia", n:"Чіпси Diana Orígenes Tortilla Dip con Chía (1 шт = порція 14 г)", k:529, p:7.1, piece:14, gdef:1},
+  {g:"Солодке та інше", id:"tortrix", n:"Чіпси Tortrix Chapinacho Quesito (1 шт = пачка 32 г)", k:533, p:6.7, piece:32},
+  {g:"Солодке та інше", id:"doritos", n:"Чіпси Doritos (1 шт ≈ 2 г)", k:500, p:7, piece:2},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"botran", n:"Ром Botran 37% (1 шт = чарка 50 мл)", k:205, p:0, piece:50},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"venado", n:"Білий ром Venado 36% (1 шт = чарка 50 мл)", k:200, p:0, piece:50},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"moza", n:"Пиво Moza oscuro темне ≈5% (1 шт = пляшка 357 мл)", k:45, p:0.4, piece:357},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"clamato", n:"Томатний сік з молюсками (типу Clamato) (1 шт = склянка 200 мл)", k:15, p:0.5, piece:200, gdef:1},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"colazero", n:"Кола без цукру (1 шт = склянка 250 мл)", k:0.5, p:0, piece:250},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"cola", n:"Кола звичайна, з цукром (1 шт = склянка 250 мл)", k:42, p:0, piece:250},
+  {g:"Напої та алкоголь (1 г = 1 мл)", id:"coffee", n:"Кава чорна без цукру (1 шт = чашка 250 мл)", k:0.8, p:0.1, piece:250},
+  {g:"Солодке та інше", id:"oil", n:"Олія", k:899, p:0},
+  {g:"Солодке та інше", id:"custom", n:"Інше: ввести ккал і білок на 100 г самому", k:0, p:0}
+];
+const FOOD = Object.fromEntries(FOODS.map(f => [f.id, f]));
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const iso = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const parseIso = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const fmt = n => Math.round(n).toLocaleString("uk-UA");
+const DOW = ["нд","пн","вт","ср","чт","пт","сб"];
+const DOWF = ["неділя","понеділок","вівторок","середа","четвер","п'ятниця","субота"];
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+const numTxt = v => String(Math.round(v * 100) / 100).replace(".", ",");
+
+let current = iso(new Date());
+const days = {};
+const dirty = new Set();
+let db = null, mode = "local";
+
+function day(date) {
+  if (!days[date]) days[date] = {weight: "", entries: []};
+  if (!days[date].entries) days[date].entries = [];
+  return days[date];
+}
+function foodOf(e) { return e.food === "custom" ? {k: +e.ck || 0, p: +e.cp || 0} : (FOOD[e.food] || {k: 0, p: 0}); }
+function entryCalc(e) {
+  const f = foodOf(e);
+  const piece = (FOOD[e.food] || {}).piece;
+  const grams = e.unit === "pc" && piece ? (+e.amount || 0) * piece : (+e.amount || 0);
+  return {kcal: grams * f.k / 100, prot: grams * f.p / 100};
+}
+function dayTotals(d) {
+  let kcal = 0, prot = 0;
+  ((d && d.entries) || []).forEach(e => { const c = entryCalc(e); kcal += c.kcal; prot += c.prot; });
+  return {kcal, prot};
+}
+function shortName(e) {
+  if (e.food === "custom") return e.cn || "Інше";
+  const n = (FOOD[e.food] || {n: e.food}).n;
+  return n.replace(/\s*\((1 шт|1 г)[^)]*\)\s*$/, "");
+}
+function amtText(e) { return e.unit === "pc" ? `${numTxt(e.amount)} шт` : `${numTxt(e.amount)} ${/^(milkdel|silkalm|botran|venado|moza|clamato|colazero|cola|coffee)$/.test(e.food) ? "мл" : "г"}`; }
+
+/* ---------- storage (same format as before) ---------- */
+function loadLocal() { try { Object.assign(days, JSON.parse(localStorage.getItem("food-log") || "{}")); } catch (e) {} }
+function saveLocal() { try { localStorage.setItem("food-log", JSON.stringify(days)); } catch (e) {} }
+const timers = {}, writing = {};
+function scheduleSave(date) {
+  dirty.add(date);
+  if (mode !== "db") { saveLocal(); dirty.delete(date); setStatus("Збережено на цьому телефоні"); return; }
+  setStatus("Зберігаю…");
+  clearTimeout(timers[date]);
+  timers[date] = setTimeout(() => flush(date), 500);
+}
+async function flush(date) {
+  if (writing[date]) { timers[date] = setTimeout(() => flush(date), 300); return; }
+  writing[date] = true;
+  const body = JSON.parse(JSON.stringify(day(date)));
+  try {
+    await db.doc("days/" + date).set(body);
+    if (JSON.stringify(day(date)) === JSON.stringify(body)) dirty.delete(date);
+    setStatus("Збережено ✓");
+  } catch (e) {
+    setStatus(e && e.code === "invalid_argument" ? "Немає прав на запис" : "Не збереглося, пробую ще раз", true);
+    if (e && e.code === "unavailable") setTimeout(() => flush(date), 1500 + Math.random() * 1000);
+  } finally { writing[date] = false; }
+  saveLocal();
+}
+function setStatus(t, err) { const s = $("status"); s.textContent = t; s.className = err ? "err" : ""; }
+
+/* ---------- day view ---------- */
+function dateLabel() {
+  const d = parseIso(current), t = iso(new Date());
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const base = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+  if (current === t) return `Сьогодні, ${base}`;
+  if (current === iso(y)) return `Вчора, ${base}`;
+  return `${DOWF[d.getDay()][0].toUpperCase() + DOWF[d.getDay()].slice(1)}, ${base}`;
+}
+function renderMeals() {
+  const d = day(current);
+  $("meals").innerHTML = MEALS.map(m => {
+    const list = d.entries.filter(e => e.meal === m.id);
+    let k = 0, p = 0;
+    const rows = list.map(e => {
+      const c = entryCalc(e); k += c.kcal; p += c.prot;
+      return `<button class="item" type="button" data-edit="${esc(e.id)}"><span class="n">${esc(shortName(e))}</span><span class="k">${fmt(c.kcal)}</span><span class="a">${amtText(e)}</span><span class="p">${fmt(c.prot)} г білка</span></button>`;
+    }).join("");
+    return `<section class="card meal"><div class="mhead"><div class="t"><h2>${m.name}</h2><small>${m.time ? m.time + " · " : ""}${list.length ? `${fmt(k)} ккал · ${fmt(p)} г білка` : "порожньо"}</small></div><button class="plus" type="button" data-add="${m.id}" aria-label="Додати в ${m.name}">+ Додати</button></div>${rows || ""}</section>`;
+  }).join("");
+}
+function renderTotals() {
+  const t = dayTotals(day(current));
+  const left = TARGET_KCAL - t.kcal;
+  $("kLbl").textContent = left >= 0 ? "Можна ще з'їсти" : "Перебір за день";
+  $("kLeft").textContent = fmt(Math.abs(left));
+  $("bigK").classList.toggle("over", left < -100);
+  $("kcal").textContent = fmt(t.kcal);
+  $("prot").textContent = fmt(t.prot);
+  $("kcalBar").style.width = Math.min(100, t.kcal / TARGET_KCAL * 100) + "%";
+  $("kcalBar").classList.toggle("over", t.kcal > TARGET_KCAL + 100);
+  $("protBar").style.width = Math.min(100, t.prot / TARGET_PROT * 100) + "%";
+  const pl = TARGET_PROT - t.prot;
+  $("protHint").textContent = pl > 0 ? `добрати ${fmt(pl)} г` : "ціль виконана ✓";
+}
+
+/* ---------- progress view (week, charts, measurements) ---------- */
+function defText(v) { return v >= 0 ? `<span class="down">−${fmt(v)}</span>` : `<span class="up">+${fmt(-v)}</span>`; }
+function renderWeek() {
+  const tb = $("week"); tb.innerHTML = "";
+  let sumK = 0, sumDef = 0, n = 0;
+  const pts = [];
+  const base = parseIso(current);
+  const mon = new Date(base); mon.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+  { const before = Object.keys(days).filter(k => k < iso(mon) && parseFloat((days[k] || {}).weight) > 0).sort();
+    $("wStart").textContent = before.length ? String(days[before[before.length - 1]].weight).replace(".", ",") : "132"; }
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(mon); dt.setDate(mon.getDate() + i);
+    const key = iso(dt), d = days[key], t = d ? dayTotals(d) : {kcal: 0, prot: 0};
+    const has = d && d.entries && d.entries.length;
+    if (has) { n++; sumK += t.kcal; sumDef += MAINT - t.kcal; }
+    pts.push({lbl: DOW[dt.getDay()], day: `${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}`, kcal: has ? t.kcal : null});
+    const tr = document.createElement("tr"); if (key === current) tr.className = "cur";
+    tr.innerHTML = `<td>${DOW[dt.getDay()]}, ${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}</td>
+      <td class="r num">${has ? fmt(t.kcal) : "—"}</td><td class="r num">${has ? fmt(t.prot) : "—"}</td>
+      <td class="r num">${has ? defText(MAINT - t.kcal) : "—"}</td><td class="r">${d && d.creatine ? "✓" : "—"}</td>`;
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => { go(key); showTab("day"); });
+    tb.appendChild(tr);
+  }
+  drawCharts(pts);
+  const ft = $("weekFoot");
+  if (!n) { ft.innerHTML = ""; return; }
+  ft.innerHTML = `<tr><td><b>Разом</b></td><td class="r num"><b>${fmt(sumK)}</b></td><td></td><td class="r num"><b>${defText(sumDef)}</b></td><td></td></tr>
+    <tr><td colspan="5" class="hint" style="white-space:normal">${sumDef >= 0
+      ? `Дефіцит ${fmt(sumDef)} ккал ≈ ${(sumDef / 7700).toFixed(2).replace(".", ",")} кг жиру.`
+      : `Перебір ${fmt(-sumDef)} ккал ≈ +${(-sumDef / 7700).toFixed(2).replace(".", ",")} кг.`}
+      Ціль на тиждень: дефіцит 7000 ккал, ${sumDef >= 7000 ? "виконана ✓" : `залишилось ${fmt(7000 - sumDef)} ккал`}.</td></tr>`;
+}
+function refLine(x1, x2, yy, label) {
+  return `<line x1="${x1}" x2="${x2}" y1="${yy}" y2="${yy}" stroke="var(--fg)" stroke-width="1" stroke-dasharray="4 3" opacity=".55"/>` +
+    `<text class="ref" x="${x2}" y="${yy - 4}" text-anchor="end">${label}</text>`;
+}
+function drawCharts(pts) {
+  const W = 340, H = 190, L = 34, R = 6, T = 16, B = 22, pw = W - L - R, ph = H - T - B, bw = pw / 7;
+  const ymax = Math.max(3800, ...pts.map(p => p.kcal || 0)) * 1.05;
+  const y = v => T + ph - v / ymax * ph;
+  let g = "";
+  for (let v = 0; v <= ymax; v += 1000)
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v ? v / 1000 + "k" : "0"}</text>`;
+  pts.forEach((p, i) => {
+    const x = L + i * bw;
+    g += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${p.lbl}</text>`;
+    if (p.kcal != null) {
+      const over = p.kcal > TARGET_KCAL + 100;
+      g += `<g><title>${p.lbl}, ${p.day}: ${fmt(p.kcal)} ккал</title><rect x="${x + bw * .2}" y="${y(p.kcal)}" width="${bw * .6}" height="${Math.max(0, y(0) - y(p.kcal))}" rx="4" fill="var(${over ? "--warn" : "--accent"})"/></g>`;
+    }
+  });
+  g += refLine(L, W - R, y(TARGET_KCAL), "ціль 2400") + refLine(L, W - R, y(MAINT), "підтримка 3450");
+  $("chartKcal").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Калорії по днях тижня">${g}</svg>`;
+
+  let last = -1; pts.forEach((p, i) => { if (p.kcal != null) last = i; });
+  const cum = []; let run = 0;
+  pts.forEach((p, i) => { if (p.kcal != null) run += MAINT - p.kcal; cum.push(i <= last ? run : null); });
+  const vals = cum.filter(v => v != null);
+  const lo = Math.min(0, ...vals), hi = Math.max(7500, ...vals) * 1.05;
+  const y2 = v => T + ph - (v - lo) / (hi - lo) * ph;
+  const cx = i => L + i * bw + bw / 2;
+  let h = "";
+  for (let v = Math.ceil(lo / 2000) * 2000; v <= hi; v += 2000)
+    h += `<line x1="${L}" x2="${W - R}" y1="${y2(v)}" y2="${y2(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y2(v) + 4}" text-anchor="end">${v ? v / 1000 + "k" : "0"}</text>`;
+  pts.forEach((p, i) => { h += `<text x="${cx(i)}" y="${H - 6}" text-anchor="middle">${p.lbl}</text>`; });
+  h += refLine(L, W - R, y2(7000), "ціль 7000");
+  if (vals.length) {
+    const line = cum.map((v, i) => v == null ? null : `${cx(i)},${y2(v)}`).filter(Boolean).join(" ");
+    h += `<polyline points="${L},${y2(0)} ${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+    cum.forEach((v, i) => {
+      if (v == null || pts[i].kcal == null) return;
+      h += `<g><title>${pts[i].lbl}, ${pts[i].day}: накопичено ${fmt(v)} ккал</title><circle cx="${cx(i)}" cy="${y2(v)}" r="4" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/></g>`;
+    });
+    const lastV = cum[last];
+    h += `<text class="ref" x="${Math.min(cx(last) + 8, W - R)}" y="${y2(lastV) - 8}" text-anchor="${last > 4 ? "end" : "start"}">${fmt(lastV)}</text>`;
+  }
+  $("chartDef").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопичений дефіцит за тиждень">${h}</svg>`;
+  const total = vals.length ? cum[last] : 0;
+  $("defHint").textContent = !vals.length ? "Записів за цей тиждень поки немає."
+    : total >= 7000 ? `Накопичено ${fmt(total)} ккал, ціль тижня виконана.` : `Накопичено ${fmt(total)} з 7000 ккал.`;
+}
+const MEAS = [
+  {id: "bu", n: "Верх живота", h: "трохи нижче грудей"},
+  {id: "bl", n: "Низ живота", h: "де живіт найбільший"},
+  {id: "waist", n: "Талія", h: "окружність пояса"},
+  {id: "chest", n: "Груди", h: "на рівні сосків"}
+];
+function buildMeas() {
+  const box = $("measIn");
+  MEAS.forEach(m => {
+    const l = document.createElement("label");
+    l.innerHTML = `${m.n} <span>${m.h}</span>`;
+    const i = document.createElement("input"); i.className = "field"; i.type = "number"; i.step = "0.1"; i.min = "0"; i.inputMode = "decimal"; i.placeholder = "см"; i.id = "m-" + m.id;
+    i.addEventListener("change", () => { const d = day(current); d.meas = d.meas || {}; d.meas[m.id] = i.value; scheduleSave(current); render(); });
+    l.appendChild(i); box.appendChild(l);
+  });
+}
+const START_W = {date: "2026-10-26", w: 132};
+// weigh-in and measurements: every 2nd Saturday, from 28.11.2026
+const MEAS_ANCHOR = "2026-11-28";
+let forceMeas = "";
+function isWeighDay(k) {
+  const d = parseIso(k); if (d.getDay() !== 6) return false;
+  const diff = Math.round((d - parseIso(MEAS_ANCHOR)) / 864e5);
+  return ((diff / 7) % 2 + 2) % 2 === 0;
+}
+function nextWeighDay(from) {
+  const d = parseIso(from);
+  for (let i = 0; i < 15; i++) { const k = iso(d); if (isWeighDay(k)) return k; d.setDate(d.getDate() + 1); }
+  return from;
+}
+function renderMeas() {
+  const d = day(current);
+  MEAS.forEach(m => { const i = $("m-" + m.id); if (document.activeElement !== i) i.value = (d.meas && d.meas[m.id]) || ""; });
+  const hasMeas = parseFloat(d.weight) > 0 || (d.meas && MEAS.some(m => parseFloat(d.meas[m.id]) > 0));
+  $("friCard").hidden = !isWeighDay(current) && !hasMeas && forceMeas !== current;
+  { const nx = nextWeighDay(iso(new Date())), nd = parseIso(nx);
+    $("nextMeas").textContent = nx === iso(new Date()) ? "Сьогодні день зважування і замірів (зранку натщесерце)." : `Наступне зважування і заміри: субота, ${pad(nd.getDate())}.${pad(nd.getMonth() + 1)}. Раз на 2 тижні, зранку натщесерце.`; }
+  { const dt = parseIso(current); $("measDate").textContent = `· ${DOW[dt.getDay()]}, ${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}`; }
+  const rows = Object.keys(days).filter(k => { const x = days[k]; return x && (parseFloat(x.weight) > 0 || (x.meas && MEAS.some(m => parseFloat(x.meas[m.id]) > 0))); }).sort();
+  const num = v => (Math.round(v * 10) / 10).toString().replace(".", ",");
+  const diff = v => v === 0 ? "0" : `<span class="${v > 0 ? "up" : "down"}">${v > 0 ? "+" : "−"}${num(Math.abs(v))}</span>`;
+  const tb = $("measHist"); tb.innerHTML = "";
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="6" class="hint">Поки замірів немає. У суботу зважування на вкладці «День» з'явиться поле для ваги і замірів.</td></tr>`; return; }
+  const first = {}, prev = {};
+  rows.forEach(k => {
+    const x = days[k], dt = parseIso(k);
+    const cells = MEAS.map(m => {
+      const v = parseFloat((x.meas || {})[m.id]);
+      if (!(v > 0)) return `<td class="r num">—</td>`;
+      const s = prev[m.id] != null ? ` (${diff(v - prev[m.id])})` : "";
+      if (first[m.id] == null) first[m.id] = v;
+      prev[m.id] = v;
+      return `<td class="r num">${num(v)}${s}</td>`;
+    }).join("");
+    const tr = document.createElement("tr"); if (k === current) tr.className = "cur";
+    tr.innerHTML = `<td>${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}</td><td class="r num">${x.weight ? String(x.weight).replace(".", ",") : "—"}</td>${cells}`;
+    tr.style.cursor = "pointer"; tr.addEventListener("click", () => { go(k); showTab("day"); });
+    tb.appendChild(tr);
+  });
+  if (rows.length > 1) {
+    const tr = document.createElement("tr");
+    const wv = rows.map(k => parseFloat(days[k].weight)).filter(v => v > 0);
+    const wd = wv.length ? diff(wv[wv.length - 1] - START_W.w) : "—";
+    tr.innerHTML = `<td><b>Від старту</b></td><td class="r num"><b>${wd}</b></td>` + MEAS.map(m => `<td class="r num"><b>${first[m.id] != null ? diff(prev[m.id] - first[m.id]) : "—"}</b></td>`).join("");
+    tb.appendChild(tr);
+  }
+}
+function drawWeight() {
+  const pts = Object.keys(days).filter(k => days[k] && parseFloat(days[k].weight) > 0).sort().map(k => ({date: k, w: parseFloat(days[k].weight)}));
+  if (!pts.length || pts[0].date > START_W.date) pts.unshift(START_W);
+  const W = 340, H = 190, L = 40, R = 14, T = 18, B = 22, pw = W - L - R, ph = H - T - B;
+  const ws = pts.map(p => p.w);
+  const lo = Math.floor(Math.min(...ws) - 1), hi = Math.ceil(Math.max(...ws) + 1);
+  const y = v => T + ph - (v - lo) / (hi - lo) * ph;
+  const x = i => pts.length === 1 ? L + pw / 2 : L + i * pw / (pts.length - 1);
+  const short = s => s.slice(8, 10) + "." + s.slice(5, 7);
+  let g = "";
+  const step = hi - lo > 8 ? 2 : 1;
+  for (let v = lo; v <= hi; v += step)
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  const every = Math.ceil(pts.length / 6);
+  pts.forEach((p, i) => { if (i % every === 0 || i === pts.length - 1) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${short(p.date)}</text>`; });
+  if (pts.length > 1) g += `<polyline points="${pts.map((p, i) => x(i) + "," + y(p.w)).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  pts.forEach((p, i) => { g += `<g><title>${short(p.date)}: ${String(p.w).replace(".", ",")} кг</title><circle cx="${x(i)}" cy="${y(p.w)}" r="4" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/></g>`; });
+  const last = pts[pts.length - 1];
+  g += `<text class="ref" x="${x(pts.length - 1)}" y="${y(last.w) - 10}" text-anchor="${pts.length > 1 ? "end" : "middle"}">${String(last.w).replace(".", ",")}</text>`;
+  $("chartWeight").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Динаміка ваги">${g}</svg>`;
+  const kg = v => (Math.round(v * 10) / 10).toString().replace(".", ",");
+  if (pts.length < 2) { $("wHint").textContent = `Старт ${kg(START_W.w)} кг. Вага вноситься раз на 2 тижні в суботу, і тут з'явиться графік.`; return; }
+  const prev = pts[pts.length - 2], total = pts[0].w - last.w, wk = prev.w - last.w;
+  $("wHint").textContent = `Зараз ${kg(last.w)} кг. Від старту: ${total >= 0 ? "мінус " + kg(total) : "плюс " + kg(-total)} кг. З минулого зважування: ${wk >= 0 ? "мінус " + kg(wk) : "плюс " + kg(-wk)} кг.`;
+}
+
+let tab = "day";
+function showTab(t) {
+  tab = t;
+  $("vDay").hidden = t !== "day"; $("vProg").hidden = t !== "prog";
+  $("tabDay").setAttribute("aria-current", t === "day" ? "page" : "false");
+  $("tabProg").setAttribute("aria-current", t === "prog" ? "page" : "false");
+  window.scrollTo(0, 0);
+}
+
+function render() {
+  $("date").value = current;
+  $("dateLbl").textContent = dateLabel();
+  const w = $("weight");
+  if (document.activeElement !== w) w.value = day(current).weight || "";
+  const cr = !!day(current).creatine;
+  $("creatine").setAttribute("aria-pressed", cr);
+  $("creaHint").textContent = cr ? "Випито сьогодні ✓" : "Натисни, коли випив";
+  renderMeals();
+  renderTotals();
+  renderAdvice();
+  renderWeek();
+  drawWeight();
+  renderMeas();
+}
+function go(date) { current = date; render(); }
+
+/* ---------- advice ---------- */
+const SWEET = "Багато цукру й жиру, а білка майже немає, тому швидко захочеться їсти знову. Краще: рікота з бананом і чайною ложкою меду, желе або яблуко.";
+const FRIED = "Фритюр додає багато олії. Краще курка з аерогриля: грудка 165 ккал на 100 г проти 260.";
+const ALC = "Алкоголь дає порожні калорії, гальмує спалювання жиру і розганяє апетит. Якщо п'єш, то 1–2 чарки з колою без цукру і без чіпсів.";
+const CHIPS = "Чіпси: понад 500 ккал на 100 г, пачка йде непомітно. Краще мариновані огірки, яблуко або 2–3 варені білки.";
+const TIPS = {
+  bonobon: SWEET, bar: SWEET, wafer: SWEET, mymotto: SWEET, kick: SWEET, barritas: SWEET, kartoshka: SWEET, cake: SWEET, chocsponge: SWEET, icecream: SWEET,
+  dianachia: CHIPS, tortrix: CHIPS, doritos: CHIPS,
+  frbreast: FRIED, frwing: FRIED, frleg: FRIED, frthigh: FRIED,
+  botran: ALC, venado: ALC, moza: ALC,
+  condmilk: "Згущене молоко майже чистий цукор. Краще чайна ложка меду або банан у рікоті.",
+  cola: "Склянка коли з цукром це 105 ккал цукру. Краще кола без цукру, смак той самий.",
+  porkfat: "Жирна свинина майже вдвічі калорійніша за вирізку. Краще свиняча вирізка або куряче філе.",
+  pistsalami: "Сиров'ялена ковбаса: 420 ккал на 100 г і багато солі. Краще запечена грудка або індичка.",
+  oil: "1 столова ложка олії ≈ 120 ккал. Відміряй 3–5 г або готуй в аерогрилі без олії.",
+  butter: "1 столова ложка масла ≈ 100 ккал. Для омлету вистачить 3–5 г.",
+  pbutter: "Корисні жири, але дуже калорійно: столова ложка ≈ 90 ккал. Відміряй ложкою, не їж з банки.",
+  peanuts: "Корисно, але калорійно: жменька 28 г ≈ 160 ккал. Відсип порцію, не їж з пачки.",
+  cfries: "Фрі з аерогриля нормально, але печена картопля в шкірці вдвічі легша: 93 ккал проти 185.",
+  frozenfries: "Краще печена картопля в шкірці з аерогриля: удвічі менше калорій.",
+  dates: "Фініки корисні, але це майже чистий цукор. Норма 2–3 штуки.",
+  honey: "Мед це цукор. Норма 1 чайна ложка.",
+  tortilla: "Кукурудзяна тортилья легша за пшеничну: 218 ккал на 100 г проти 300.",
+  brownchz: "Домашній десерт нормальний, але тримай порцію до 100–150 г."
+};
+const GOOD = new Set(["chicken","cchicken","turkey","cturkey","tuna","fish","cfish","eggwhite","boiledwhite","brynza","silkalm","beef","cbeef","porkloin","cporkloin","egg","boiledegg"]);
+function tipFor(id) {
+  if (TIPS[id]) return `<b>Порада</b>${TIPS[id]}`;
+  if (GOOD.has(id)) return `<b>Добрий вибір</b>Багато білка на свої калорії, це те, що треба для схуднення.`;
+  return "";
+}
+function renderAdvice() {
+  const d = day(current), t = dayTotals(d), out = [];
+  if (!d.entries.length) { $("advice").hidden = true; return; }
+  let sweet = 0, alc = 0, fried = 0;
+  d.entries.forEach(e => { const c = entryCalc(e).kcal;
+    if (TIPS[e.food] === SWEET || TIPS[e.food] === CHIPS || e.food === "condmilk") sweet += c;
+    if (TIPS[e.food] === ALC) alc += c;
+    if (TIPS[e.food] === FRIED) fried += c; });
+  const left = TARGET_KCAL - t.kcal, pl = TARGET_PROT - t.prot;
+  if (left < -100) out.push(`Перебір ${fmt(-left)} ккал. Голодувати завтра не треба, просто повертайся до 2 400.`);
+  else if (left < 500 && pl > 35) out.push(`Залишилось ${fmt(Math.max(0, left))} ккал, а білка треба ще ${fmt(pl)} г. Бери пісне: банка тунця (79 ккал, 16 г білка), куряча грудка, яєчні білки або бринза.`);
+  else if (t.kcal > 600 && t.prot / t.kcal * 100 < 5.5) out.push(`Білка мало на ці калорії. Наступний прийом збери навколо м'яса, тунця або яєць, а крупу зменш.`);
+  if (sweet > 250) out.push(`Солодке і чіпси сьогодні вже ${fmt(sweet)} ккал. На решту дня краще яблуко, желе або рікота.`);
+  if (alc > 0) out.push(`Алкоголь сьогодні ${fmt(alc)} ккал. Пий воду між чарками і не закусуй чіпсами.`);
+  if (fried > 300) out.push(`Курка у фритюрі дала ${fmt(fried)} ккал. Наступного разу з аерогриля вийде майже вдвічі менше.`);
+  if (!out.length && t.kcal > 1200) out.push(pl > 0 ? `Усе йде за планом. Білка добери ще ${fmt(pl)} г.` : "Усе за планом: і калорії, і білок у нормі.");
+  $("advice").hidden = !out.length;
+  $("adviceList").innerHTML = out.slice(0, 3).map(x => `<li>${x}</li>`).join("");
+}
+
+/* ---------- add / edit sheet ---------- */
+const sh = {mode: "add", meal: "lunch", food: null, unit: "g", entry: null, cat: ""};
+function mealByTime() {
+  const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
+  if (m < 4 * 60) return "extra";
+  if (m < 8 * 60 + 30) return "breakfast";
+  if (m < 11 * 60) return "snack1";
+  if (m < 15 * 60) return "lunch";
+  if (m < 18 * 60 + 15) return "snack";
+  return "dinner";
+}
+function usage() {
+  const cnt = {}, lastUse = {};
+  Object.keys(days).sort().forEach(k => (days[k].entries || []).forEach(e => {
+    if (e.food === "custom" || !FOOD[e.food]) return;
+    cnt[e.food] = (cnt[e.food] || 0) + 1; lastUse[e.food] = {amount: e.amount, unit: e.unit};
+  }));
+  return {cnt, lastUse};
+}
+function renderChips() {
+  $("mealChips").innerHTML = MEALS.map(m => `<button class="chip" type="button" data-meal="${m.id}" aria-pressed="${sh.meal === m.id}">${m.name}</button>`).join("");
+  requestAnimationFrame(() => { const c = $("mealChips"), b = c.querySelector('[aria-pressed="true"]'); if (b) c.scrollLeft = Math.max(0, b.offsetLeft - c.offsetLeft - 16); });
+  $("save").textContent = sh.mode === "add" ? `Додати в «${MEAL[sh.meal].name}»` : "Зберегти";
+}
+function foodBtn(f) {
+  return `<button class="food" type="button" data-food="${f.id}"><span>${esc(f.n)}</span><small>${f.id === "custom" ? "" : `${fmt(f.k)} ккал<br>${numTxt(f.p)} г білка<br>на 100 г`}</small></button>`;
+}
+const CATS = [...new Set(FOODS.map(f => f.g))];
+function lastMealEntries(meal) {
+  const keys = Object.keys(days).filter(k => k < current).sort().reverse();
+  for (const k of keys) { const l = (days[k].entries || []).filter(e => e.meal === meal); if (l.length) return {date: k, list: l}; }
+  return null;
+}
+function tile(f) {
+  return `<button class="tile" type="button" data-food="${f.id}"><b>${esc(f.n.replace(/\s*\(.*$/, ""))}</b><small>${fmt(f.k)} ккал · ${numTxt(f.p)} г білка на 100 г</small></button>`;
+}
+function renderFoodList() {
+  const q = $("q").value.trim().toLowerCase();
+  let html = "";
+  if (q) {
+    const words = q.split(/\s+/);
+    const hit = FOODS.filter(f => words.every(w => (f.n + " " + f.g).toLowerCase().includes(w)));
+    html = hit.length ? `<div class="flist">${hit.map(foodBtn).join("")}</div>`
+      : `<p class="hint">Такого продукту в списку немає. Можна внести його самому:</p><div class="flist">${foodBtn(FOOD.custom)}</div>`;
+  } else if (sh.cat) {
+    html = `<button class="link" type="button" data-cat="">‹ Усі категорії</button><div class="glabel">${esc(sh.cat)}</div><div class="flist">${FOODS.filter(f => f.g === sh.cat && f.id !== "custom").map(foodBtn).join("")}</div>`;
+  } else {
+    const last = lastMealEntries(sh.meal);
+    if (last) {
+      const t = dayTotals({entries: last.list});
+      const d = parseIso(last.date);
+      html += `<button class="repeat" type="button" data-repeat="${last.date}"><span>↻ Повторити «${esc(MEAL[sh.meal].name)}» як ${DOW[d.getDay()]}, ${pad(d.getDate())}.${pad(d.getMonth() + 1)}</span><small>${last.list.map(e => esc(shortName(e).replace(/\s*\(.*$/, "")) + " " + amtText(e)).join(", ")} · ${fmt(t.kcal)} ккал</small></button>`;
+    }
+    const {cnt} = usage();
+    const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 12).map(id => FOOD[id]);
+    if (top.length) html += `<div class="glabel">Твої часті продукти</div><div class="tiles">${top.map(tile).join("")}</div>`;
+    html += `<div class="glabel">Усі продукти за категоріями</div><div class="tiles cats">${CATS.map(c => `<button class="tile cat" type="button" data-cat="${esc(c)}"><b>${esc(c)}</b><small>${FOODS.filter(f => f.g === c && f.id !== "custom").length} продуктів</small></button>`).join("")}<button class="tile cat" type="button" data-food="custom"><b>Свій продукт</b><small>ввести з етикетки</small></button></div>`;
+  }
+  $("foodList").innerHTML = html;
+}
+function repeatMeal(date) {
+  const src = (days[date].entries || []).filter(e => e.meal === sh.meal);
+  const d = day(current);
+  src.forEach(e => d.entries.push(Object.assign(JSON.parse(JSON.stringify(e)), {id: Math.random().toString(36).slice(2, 10), meal: sh.meal})));
+  scheduleSave(current); closeSheet(); render();
+}
+function openSheet(meal) {
+  sh.mode = "add"; sh.entry = null; sh.meal = meal || mealByTime(); sh.food = null; sh.cat = "";
+  $("shTitle").textContent = "Додати їжу";
+  $("q").value = "";
+  $("stepPick").hidden = false; $("stepAmt").hidden = true;
+  renderChips(); renderFoodList();
+  $("sheet").hidden = false; document.body.style.overflow = "hidden";
+  $("shBody").scrollTop = 0;
+}
+function openEdit(id) {
+  const e = day(current).entries.find(x => x.id === id); if (!e) return;
+  sh.mode = "edit"; sh.entry = e; sh.meal = e.meal; sh.food = e.food; sh.unit = e.unit || "g";
+  $("shTitle").textContent = "Змінити запис";
+  renderChips();
+  showAmount(e.amount);
+  if (e.food === "custom") { $("cName").value = e.cn || ""; $("cK").value = e.ck || ""; $("cP").value = e.cp || ""; }
+  $("sheet").hidden = false; document.body.style.overflow = "hidden";
+  $("shBody").scrollTop = 0;
+}
+function closeSheet() { $("sheet").hidden = true; document.body.style.overflow = ""; resetDel(); }
+function pickFood(id) {
+  sh.food = id;
+  const f = FOOD[id], {lastUse} = usage(), lu = lastUse[id];
+  if (lu) { sh.unit = lu.unit === "pc" && f.piece ? "pc" : "g"; }
+  else sh.unit = f.piece && !f.gdef ? "pc" : "g";
+  const amount = lu && (lu.unit === sh.unit) ? lu.amount : (sh.unit === "pc" ? 1 : 100);
+  if (id === "custom") { $("cName").value = ""; $("cK").value = ""; $("cP").value = ""; }
+  showAmount(amount);
+  if (id === "custom") setTimeout(() => $("cName").focus(), 50);
+}
+function showAmount(amount) {
+  const f = FOOD[sh.food] || {n: sh.food};
+  $("stepPick").hidden = true; $("stepAmt").hidden = false;
+  $("back").hidden = sh.mode === "edit";
+  $("del").hidden = sh.mode !== "edit";
+  $("fName").textContent = sh.food === "custom" ? (sh.mode === "edit" ? "Свій продукт" : "Свій продукт: впиши дані з етикетки") : f.n;
+  $("customBox").hidden = sh.food !== "custom";
+  { const tp = tipFor(sh.food); $("tip").hidden = !tp; $("tip").className = "tip " + (TIPS[sh.food] ? "bad" : "good"); $("tip").innerHTML = tp; }
+  $("units").hidden = !f.piece;
+  $("units").innerHTML = f.piece ? `<button type="button" data-unit="pc" aria-pressed="${sh.unit === "pc"}">штуки</button><button type="button" data-unit="g" aria-pressed="${sh.unit === "g"}">грами</button>` : "";
+  $("amt").value = amount;
+  renderQuick(); updCalc();
+  $("shBody").scrollTop = 0;
+}
+function renderQuick() {
+  const q = sh.unit === "pc" ? [0.5, 1, 2, 3, 4, 5] : [50, 100, 150, 200, 250, 300];
+  $("quick").innerHTML = q.map(v => `<button type="button" data-q="${v}">${numTxt(v)} ${sh.unit === "pc" ? "шт" : "г"}</button>`).join("");
+}
+function draftEntry() {
+  const e = {food: sh.food, amount: parseFloat(String($("amt").value).replace(",", ".")) || 0, unit: sh.unit};
+  if (sh.food === "custom") { e.ck = parseFloat($("cK").value) || 0; e.cp = parseFloat($("cP").value) || 0; }
+  return e;
+}
+function updCalc() {
+  const c = entryCalc(draftEntry());
+  $("cKcal").textContent = `${fmt(c.kcal)} ккал`;
+  $("cProt").textContent = `${fmt(c.prot)} г білка`;
+}
+function step(dir) {
+  const v = parseFloat(String($("amt").value).replace(",", ".")) || 0;
+  const s = sh.unit === "pc" ? 1 : 10;
+  $("amt").value = Math.max(0, Math.round((v + dir * s) * 100) / 100); updCalc();
+}
+function saveSheet() {
+  const d = draftEntry();
+  if (!(d.amount > 0)) { $("amt").focus(); return; }
+  if (sh.mode === "add") {
+    const e = {id: Math.random().toString(36).slice(2, 10), meal: sh.meal, food: d.food, amount: d.amount, unit: d.unit};
+    if (d.food === "custom") { e.cn = $("cName").value.trim() || "Інше"; e.ck = d.ck; e.cp = d.cp; }
+    day(current).entries.push(e);
+  } else {
+    const e = sh.entry;
+    e.meal = sh.meal; e.amount = d.amount; e.unit = d.unit;
+    if (e.food === "custom") { e.cn = $("cName").value.trim() || "Інше"; e.ck = d.ck; e.cp = d.cp; }
+  }
+  scheduleSave(current); closeSheet(); render();
+}
+function resetDel() { const b = $("del"); b.classList.remove("sure"); b.textContent = "Видалити"; }
+
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("button, [data-close]"); if (!b) return;
+  if (b.dataset.close) return closeSheet();
+  if (b.dataset.add) return openSheet(b.dataset.add);
+  if (b.dataset.edit) return openEdit(b.dataset.edit);
+  if (b.dataset.meal) { sh.meal = b.dataset.meal; renderChips(); if (sh.mode === "add" && !$("stepPick").hidden) renderFoodList(); return; }
+  if (b.dataset.cat !== undefined) { sh.cat = b.dataset.cat; $("q").value = ""; renderFoodList(); $("shBody").scrollTop = 0; return; }
+  if (b.dataset.repeat) return repeatMeal(b.dataset.repeat);
+  if (b.dataset.food) return pickFood(b.dataset.food);
+  if (b.dataset.unit) {
+    const f = FOOD[sh.food], v = parseFloat(String($("amt").value).replace(",", ".")) || 0;
+    if (b.dataset.unit !== sh.unit && f.piece) $("amt").value = b.dataset.unit === "pc" ? Math.max(0.5, Math.round(v / f.piece * 2) / 2) : Math.round(v * f.piece);
+    sh.unit = b.dataset.unit;
+    $("units").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.unit === sh.unit));
+    renderQuick(); return updCalc();
+  }
+  if (b.dataset.q) { $("amt").value = b.dataset.q; return updCalc(); }
+  switch (b.id) {
+    case "addBtn": return openSheet(tab === "day" ? null : null);
+    case "tabDay": return showTab("day");
+    case "tabProg": return showTab("prog");
+    case "prev": { const d = parseIso(current); d.setDate(d.getDate() - 1); return go(iso(d)); }
+    case "next": { const d = parseIso(current); d.setDate(d.getDate() + 1); return go(iso(d)); }
+    case "back": $("stepPick").hidden = false; $("stepAmt").hidden = true; return;
+    case "minus": return step(-1);
+    case "plus": return step(1);
+    case "save": return saveSheet();
+    case "del":
+      if (!b.classList.contains("sure")) { b.classList.add("sure"); b.textContent = "Точно видалити? Натисни ще раз"; return; }
+      { const d = day(current); d.entries = d.entries.filter(x => x !== sh.entry); scheduleSave(current); closeSheet(); render(); }
+      return;
+    case "measNow": forceMeas = iso(new Date()); go(forceMeas); showTab("day"); return;
+    case "creatine": { const d = day(current); d.creatine = !d.creatine; scheduleSave(current); return render(); }
+  }
+});
+$("q").addEventListener("input", renderFoodList);
+["amt", "cK", "cP"].forEach(id => $(id).addEventListener("input", updCalc));
+$("amt").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); saveSheet(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
+$("date").addEventListener("change", e => { if (e.target.value) go(e.target.value); });
+$("weight").addEventListener("change", e => { day(current).weight = e.target.value; scheduleSave(current); render(); });
+// back to today when the app is reopened on a new day
+let lastSeen = iso(new Date());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  const t = iso(new Date());
+  if (t !== lastSeen) { if (current === lastSeen) go(t); lastSeen = t; }
+});
+
+buildMeas();
+loadLocal();
+render();
+setStatus("Збережено на цьому телефоні");
+
+(async () => {
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch (e) { db = null; }
+  if (!db) { setStatus("Зберігається лише на цьому телефоні"); return; }
+  mode = "db";
+  setStatus("Синхронізовано ✓");
+  db.collection("days").onSnapshot(snap => {
+    snap.docs.forEach(doc => { if (!dirty.has(doc.id)) days[doc.id] = JSON.parse(JSON.stringify(doc.data())); });
+    saveLocal();
+    if (sh.entry && !$("sheet").hidden) { const fresh = day(current).entries.find(x => x.id === sh.entry.id); if (fresh) sh.entry = fresh; }
+    render();
+  }, () => setStatus("Зв'язок втрачено, онови сторінку", true));
+})();
+/* ---------- backup / transfer ---------- */
+(function(){
+  const APP = "food";
+  const inApp = !!window.APPDB;
+  const el = id => document.getElementById(id);
+  el("bkApp").hidden = !inApp; el("bkClaude").hidden = inApp; el("bkPasteBox").hidden = !inApp;
+  el("bkInfo").textContent = inApp
+    ? "Записи зберігаються на цьому телефоні. Раз на тиждень зберігай копію у файл. Надішли файл Claude, якщо хочеш, щоб він проаналізував твої результати."
+    : "Ця кнопка копіює всі записи, щоб перенести їх у застосунок на телефоні: відкрий застосунок, вкладка з записами, встав і натисни «Перенести записи».";
+  const msg = t => { el("bkMsg").textContent = t; };
+  const pack = () => JSON.stringify({app: APP, v: 1, at: new Date().toISOString(), docs: (() => { const o = {}; Object.keys(days).forEach(k => { const d = days[k]; if (d && ((d.entries||[]).length || d.weight || d.creatine || d.meas)) o["days/" + k] = d; }); return o; })()});
+  const fname = () => `${APP === "food" ? "kalorii" : "trenuvannia"}-${new Date().toISOString().slice(0,10)}.json`;
+  el("bkCopy").addEventListener("click", () => {
+    const t = pack();
+    const done = () => msg(`Скопійовано (${Object.keys(JSON.parse(t).docs).length} записів). Тепер відкрий застосунок і встав.`);
+    try { navigator.clipboard.writeText(t).then(done, () => fallback(t)); } catch (e) { fallback(t); }
+  });
+  function fallback(t){ el("bkPasteBox").hidden = false; el("bkPaste").value = t; el("bkPaste").select(); msg("Виділи весь текст вище і скопіюй його вручну."); }
+  if (!inApp) return;
+  el("bkSave").addEventListener("click", () => {
+    const blob = new Blob([pack()], {type: "application/json"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname(); document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); msg("Файл збережено в «Завантаження».");
+  });
+  el("bkShare").addEventListener("click", async () => {
+    try {
+      const file = new File([pack()], fname(), {type: "application/json"});
+      if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: fname()}); msg("Готово."); }
+      else el("bkSave").click();
+    } catch (e) { if (e && e.name !== "AbortError") msg("Не вдалося надіслати, збережи у файл."); }
+  });
+  async function doImport(text){
+    let o; try { o = JSON.parse(text); } catch (e) { msg("Це не схоже на записи щоденника. Скопіюй ще раз."); return; }
+    if (!o || o.app !== APP || !o.docs) { msg(APP === "food" ? "Це записи не з щоденника калорій." : "Це записи не з щоденника тренувань."); return; }
+    const n = await window.APPDB.importDocs(o.docs);
+    msg(`Перенесено ${n} записів.`); setTimeout(() => location.reload(), 800);
+  }
+  el("bkImport").addEventListener("click", () => doImport(el("bkPaste").value.trim()));
+  el("bkFile").addEventListener("change", e => { const f = e.target.files[0]; if (!f) return; f.text().then(doImport); e.target.value = ""; });
+})();
+</script>
+
+</body></html>

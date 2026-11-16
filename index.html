@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="uk"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Мої щоденники</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;600;700&display=swap">
+<style>
+:root{--bg:#f2f4f3;--card:#fff;--fg:#1c2220;--muted:#5f6a65;--line:#dbe1de;--food:#2f6f4f;--gym:#1f5fbf}
+@media (prefers-color-scheme:dark){:root{--bg:#141817;--card:#1d2321;--fg:#e7ece9;--muted:#9ba6a1;--line:#2d3532;--food:#7cc39c;--gym:#5b97ec;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 "Golos Text",system-ui,sans-serif}
+main{max-width:560px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px));display:grid;gap:14px}
+h1{font-size:28px;margin:0}
+a.app{display:flex;align-items:center;gap:14px;padding:16px;border-radius:18px;background:var(--card);border:1px solid var(--line);color:inherit;text-decoration:none}
+a.app img{width:64px;height:64px;border-radius:16px}
+a.app b{display:block;font-size:20px}
+a.app span{color:var(--muted);font-size:14px}
+ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;display:grid;gap:8px}
+h2{font-size:18px;margin:0}
+p{margin:0;color:var(--muted);font-size:14px}
+</style></head><body><main>
+<h1>Мої щоденники</h1>
+<a class="app" href="food/"><img src="food/icon-192.png" alt=""><div><b>Калорії</b><span>Що з'їв, скільки ще можна, білок, вага і заміри</span></div></a>
+<a class="app" href="gym/"><img src="gym/icon-192.png" alt=""><div><b>Тренування</b><span>Вид тренування, підходи, велосипед</span></div></a>
+<section class="card"><h2>Як встановити на телефон (Android, Chrome)</h2>
+<ol><li>Натисни «Калорії» вище.</li><li>Унизу з'явиться «Встановити» або «Додати на головний екран». Якщо ні: ⋮ угорі праворуч → «Встановити додаток».</li><li>Повернись сюди і так само встанови «Тренування».</li></ol>
+<p>Після цього обидва відкриваються з іконок на екрані, на весь екран, без браузера і без інтернету.</p></section>
+<section class="card"><h2>iPhone (Safari)</h2><p>Відкрий застосунок, «Поділитися» → «На початковий екран» → «Додати».</p></section>
+<p>Записи зберігаються тільки на твоєму телефоні. Раз на тиждень зберігай копію: у застосунку кнопка «Зберегти копію у файл».</p>
+</main></body></html>

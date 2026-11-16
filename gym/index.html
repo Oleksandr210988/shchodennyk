@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="uk" data-app="gym"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Тренування</title>
+<meta name="theme-color" content="#1f5fbf">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Тренування">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<script>/* Local on-device store with the same small API the diary pages use (collection/doc, set, delete, onSnapshot). Data stays on this phone. */
+(function(){
+  const KEY = "shchodennyk-db-" + (document.documentElement.dataset.app || "app");
+  let store = {};
+  try { store = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { store = {}; }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+  const colSubs = {}, docSubs = {};
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { alertQuota(); } };
+  function alertQuota(){ const s = document.getElementById("status"); if (s) s.textContent = "Пам'ять телефона переповнена"; }
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const colOf = path => path.split("/").slice(0, -1).join("/");
+  const snapCol = c => ({docs: Object.keys(store).filter(p => colOf(p) === c).map(p => ({id: p.split("/").pop(), exists: true, data: () => clone(store[p])}))});
+  const snapDoc = p => ({id: p.split("/").pop(), exists: p in store, data: () => p in store ? clone(store[p]) : undefined});
+  function notify(path){
+    const c = colOf(path);
+    (colSubs[c] || []).forEach(cb => setTimeout(() => cb(snapCol(c)), 0));
+    (docSubs[path] || []).forEach(cb => setTimeout(() => cb(snapDoc(path)), 0));
+  }
+  function docRef(path){
+    return {
+      set: async data => { store[path] = clone(data); save(); notify(path); },
+      delete: async () => { delete store[path]; save(); notify(path); },
+      get: async () => snapDoc(path),
+      onSnapshot: cb => { (docSubs[path] = docSubs[path] || []).push(cb); setTimeout(() => cb(snapDoc(path)), 0); return () => {}; }
+    };
+  }
+  const DB = {
+    doc: path => docRef(path),
+    collection: c => ({
+      doc: id => docRef(c + "/" + id),
+      onSnapshot: cb => { (colSubs[c] = colSubs[c] || []).push(cb); setTimeout(() => cb(snapCol(c)), 0); return () => {}; }
+    })
+  };
+  window.APPDB = {
+    importDocs: async docs => { let n = 0; Object.entries(docs).forEach(([p, d]) => { if (p && d && typeof d === "object") { store[p] = clone(d); n++; } }); save(); return n; },
+    count: () => Object.keys(store).length
+  };
+  window.claude = {use: async name => name === "db" ? DB : null};
+  if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+})();
+</script>
+</head><body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: phone-first gym app. Start screen = big tiles "what are you training today"; workout screen = start/finish, exercises as an accordion with big set rows (lb × reps); exercise picker is a full-screen sheet with photos */
+:root{
+  --bg:#eef0f2; --surface:#ffffff; --fg:#1b1f24; --muted:#5d6670; --line:#d6dbe0;
+  --accent:#1f5fbf; --accent-ink:#ffffff; --soft:#e3ebf7; --ok:#2e7d4f; --warn:#b3412e; --scrim:rgba(15,20,26,.5);
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121518; --surface:#1b1f24; --fg:#e8ebee; --muted:#9aa4ae; --line:#2e353c;
+  --accent:#5b97ec; --accent-ink:#0d1a2c; --soft:#1d2a3c; --ok:#5fbf86; --warn:#e57d68; --scrim:rgba(0,0,0,.65); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121518; --surface:#1b1f24; --fg:#e8ebee; --muted:#9aa4ae; --line:#2e353c;
+  --accent:#5b97ec; --accent-ink:#0d1a2c; --soft:#1d2a3c; --ok:#5fbf86; --warn:#e57d68; --scrim:rgba(0,0,0,.65); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.wrap{max-width:600px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+header .wrap{padding-block:10px;display:flex;align-items:center;gap:10px}
+.back{flex:none;height:48px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-weight:600;font-size:15px}
+.ht{flex:1;min-width:0}
+h1{font-family:var(--display);font-weight:700;font-size:25px;margin:0;line-height:1.05;text-wrap:balance}
+.sub{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);flex-wrap:wrap}
+.datebtn{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-weight:600}
+.datebtn input{position:absolute;inset:0;opacity:0;width:100%;height:100%;border:0}
+#status{font-size:12px;color:var(--muted)}
+#status.ok{color:var(--ok)} #status.err{color:var(--warn)}
+main .wrap{padding-block:14px 40px;display:grid;gap:12px}
+
+/* picker */
+.ask{font-family:var(--display);font-size:28px;font-weight:700;margin:4px 0 0;line-height:1.1}
+.types{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.type{display:flex;flex-direction:column;justify-content:space-between;gap:10px;min-height:118px;text-align:left;padding:14px;border-radius:18px;border:1px solid var(--line);background:var(--surface)}
+.type b{font-family:var(--display);font-size:23px;line-height:1.05}
+.type small{font-size:13px;color:var(--muted)}
+.type.sug{border:2px solid var(--accent);background:var(--soft)}
+.type.sug small{color:var(--accent);font-weight:600}
+.type.bike{grid-column:1/-1;min-height:84px}
+
+/* session */
+.session{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;display:grid;gap:10px}
+.go{height:60px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font:700 19px var(--body);width:100%}
+.go.stop{background:var(--ok)}
+.times{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.times label,.bikef label{display:grid;gap:2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;min-width:0}
+.times input,.bikef input{width:100%;min-width:0;height:48px;font:600 18px var(--body);font-variant-numeric:tabular-nums;text-align:center;padding:0 2px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+#dur{font-size:14px;color:var(--muted)}
+#dur b{color:var(--fg)}
+.bikef{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px}
+.bikef input{height:60px;font-size:24px}
+.bikef p{grid-column:1/-1;margin:0;font-size:13px;color:var(--muted)}
+
+.group{display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-top:4px}
+.ex{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0}
+.ex.open{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.exhead{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;width:100%;border:0;background:none;text-align:left;padding:14px;min-height:72px}
+.exhead .nm{min-width:0;font-weight:600;font-size:17px;line-height:1.25;overflow-wrap:anywhere}
+.exhead small{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.badge{min-width:52px;height:36px;border-radius:18px;display:grid;place-items:center;background:var(--bg);border:1px solid var(--line);font-weight:700;font-variant-numeric:tabular-nums;font-size:15px;padding:0 10px}
+.badge.part{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+.badge.done{background:var(--ok);border-color:var(--ok);color:var(--accent-ink)}
+.exbody{padding:0 14px 14px;display:grid;gap:10px}
+.plan{font-size:14px;color:var(--muted)}
+.plan b{color:var(--fg)}
+.sets{display:grid;gap:8px}
+.setrow{display:grid;grid-template-columns:28px minmax(0,1fr) 18px minmax(0,1fr) 64px;gap:6px;align-items:center}
+.setrow .no{font-weight:700;color:var(--muted);text-align:center;font-size:17px}
+.setrow .x{text-align:center;color:var(--muted)}
+.cell{position:relative;min-width:0}
+.cell input{width:100%;min-width:0;height:56px;font:700 22px var(--body);font-variant-numeric:tabular-nums;text-align:center;padding:12px 2px 0;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.cell span{position:absolute;top:5px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;pointer-events:none}
+.cell input::placeholder{color:var(--muted);opacity:.5;font-weight:500}
+.cell input.filled{background:var(--soft);border-color:var(--accent)}
+.same{height:56px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:12px;line-height:1.1;color:var(--accent);font-weight:600;padding:0 2px}
+.same[disabled]{opacity:.35}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.tool{height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:600;font-size:14px;padding:0 12px}
+.tool.acc{border-color:var(--accent);color:var(--accent)}
+.tool.red{color:var(--warn)}
+.how{display:block;max-width:100%;height:auto;max-height:200px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.next{height:52px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:700 17px var(--body)}
+.addex{height:52px;border:2px dashed var(--line);border-radius:14px;background:none;font-weight:600;color:var(--accent)}
+.credit{font-size:12px;color:var(--muted);margin:0}
+.credit a{color:inherit}
+section.hist{display:grid;gap:8px;margin-top:10px}
+section.hist h2{font-family:var(--display);font-size:22px;margin:0}
+.hist ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.hist li button{width:100%;display:flex;justify-content:space-between;gap:8px;text-align:left;border:1px solid var(--line);background:var(--surface);font-size:15px;padding:12px;border-radius:12px;min-height:52px;align-items:center}
+.hist li button.cur{border-color:var(--accent)}
+.hist li span:last-child{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.empty{color:var(--muted);font-size:14px;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{height:48px;border:1px solid var(--line);background:var(--surface);font:600 15px var(--body);padding:0 16px;border-radius:12px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--warn)}
+
+.bk{display:grid;gap:8px}
+.bk .row{display:flex;flex-wrap:wrap;gap:8px}
+.bk button{height:48px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:600;padding:0 14px;flex:1 1 160px}
+.bk textarea{width:100%;min-height:90px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:10px;font-size:13px}
+.bk .msg{font-size:14px;margin:0}
+.bk h2{font-family:var(--display);font-size:22px;margin:0}
+/* exercise picker sheet */
+.sheet{position:fixed;inset:0;z-index:20}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.panel{position:absolute;left:0;right:0;bottom:0;top:calc(env(safe-area-inset-top,0px) + 24px);max-width:640px;margin:0 auto;background:var(--bg);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.sh-head{display:flex;align-items:center;gap:8px;padding:12px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
+.sh-head h2{flex:1;margin:0;font-family:var(--display);font-size:24px}
+.xbtn{width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:20px}
+.sh-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:8px;align-content:start}
+.opt{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:center;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:8px;min-height:64px}
+.opt img,.opt .noimg{width:96px;height:48px;object-fit:cover;border-radius:8px;background:var(--bg);display:block}
+.opt b{font-weight:600;font-size:15px;line-height:1.25}
+.opt small{display:block;color:var(--muted);font-size:12px}
+.opt[disabled]{opacity:.45}
+.opt.cur{border:2px solid var(--accent)}
+.customrow{display:flex;gap:6px;flex-wrap:wrap}
+.customrow input{flex:1 1 180px;min-width:0;height:50px;font:500 16px var(--body);padding:0 12px;border:1px solid var(--accent);border-radius:12px;background:var(--surface)}
+@media (prefers-reduced-motion:no-preference){.cell input{transition:background .12s,border-color .12s}}
+</style>
+
+<header><div class="wrap">
+  <button class="back" id="backBtn" type="button" hidden>‹ Вид</button>
+  <div class="ht"><h1 id="title">Щоденник тренувань</h1>
+    <div class="sub"><label class="datebtn" for="date" id="dateWrap"><span id="dateLbl"></span> ▾<input type="date" id="date" aria-label="Дата тренування"></label><span id="status">Підключення…</span></div></div>
+</div></header>
+
+<main><div class="wrap">
+  <section id="vPick" style="display:grid;gap:12px">
+    <p class="ask">Що тренуємо сьогодні?</p>
+    <div class="types" id="types"></div>
+  </section>
+
+  <section id="vWork" hidden style="display:grid;gap:12px">
+    <div class="session">
+      <button class="go" id="goBtn" type="button"></button>
+      <div class="times">
+        <label for="start">Початок<input type="time" id="start"></label>
+        <label for="end">Кінець<input type="time" id="end"></label>
+        <label for="kcal">Ккал<input id="kcal" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+      </div>
+      <span id="dur"></span>
+    </div>
+    <div class="bikef" id="bikeBox" hidden>
+      <label for="bmin">Хвилин<input id="bmin" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+      <label for="bkm">Кілометрів<input id="bkm" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+      <label for="blvl">Рівень навантаження<input id="blvl" inputmode="numeric" autocomplete="off" placeholder="—"></label>
+      <label for="bhr">Середній пульс<input id="bhr" inputmode="numeric" autocomplete="off" placeholder="—"></label>
+      <p id="bikePrev"></p>
+    </div>
+    <div id="list" style="display:grid;gap:10px"></div>
+    <div class="actions">
+      <button class="btn danger" id="delBtn" type="button">Видалити це тренування</button>
+      <button class="btn danger" id="delYes" type="button" hidden>Так, видалити</button>
+      <button class="btn" id="delNo" type="button" hidden>Скасувати</button>
+    </div>
+  </section>
+
+  <section class="hist"><h2>Останні тренування</h2><ul id="hist"></ul><p class="empty" id="histEmpty">Тут з'являться збережені тренування.</p></section>
+<section class="hist bk" id="bk">
+  <h2>Мої записи</h2>
+  <p class="hint muted" id="bkInfo" style="margin:0;font-size:13px"></p>
+  <div class="row" id="bkClaude"><button type="button" id="bkCopy">Скопіювати всі записи</button></div>
+  <div class="row" id="bkApp" hidden>
+    <button type="button" id="bkSave">Зберегти копію у файл</button>
+    <button type="button" id="bkShare">Надіслати копію</button>
+    <label style="flex:1 1 160px;display:grid"><input type="file" id="bkFile" accept=".json,application/json,text/plain" hidden><span class="bkfile" style="height:48px;border-radius:12px;border:1px solid var(--line);display:grid;place-items:center;font-weight:600;cursor:pointer">Відновити з файлу</span></label>
+  </div>
+  <div id="bkPasteBox" hidden style="display:grid;gap:8px">
+    <textarea id="bkPaste" placeholder="Встав сюди скопійовані записи (довге натискання → Вставити)" aria-label="Скопійовані записи"></textarea>
+    <button type="button" id="bkImport">Перенести записи</button>
+  </div>
+  <p class="msg" id="bkMsg" aria-live="polite"></p>
+</section>
+  <p class="credit">Сірі цифри в клітинках показують, що було минулого разу; кнопка «як мин.» переносить їх одним дотиком. Фото техніки: <a href="https://github.com/yuhonas/free-exercise-db" target="_blank" rel="noopener">Free Exercise DB</a>.</p>
+</div></main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="scrim" data-close="1"></div>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+    <div class="sh-head"><h2 id="shTitle">Вибери вправу</h2><button class="xbtn" type="button" data-close="1" aria-label="Закрити">✕</button></div>
+    <div class="sh-body" id="shBody"></div>
+  </div>
+</div>
+
+<script>
+// day = workout type (kept as "day" in saved data): 1..5 strength, 6 bike
+const DAYS = {
+  1:{t:"Груди + трицепс", g:["Груди","Трицепс"]},
+  2:{t:"Ноги + біцепс", g:["Ноги","Біцепс"]},
+  3:{t:"Спина + плечі", g:["Спина","Плечі"]},
+  4:{t:"Біцепс + трицепс", g:["Біцепс","Трицепс"]},
+  5:{t:"Задня частина ніг + литки", g:["Задня поверхня стегна і сідниці","Литки"]},
+  6:{t:"Велосипед", g:[]}
+};
+const ORDER = [1,2,3,4,5];
+const GROUP_LABEL = {"Задня поверхня стегна і сідниці":"Задня частина ніг і сідниці"};
+const LIB = {"Груди": ["Жим штанги лежачи", "Жим штанги на похилій лаві", "Жим гантелей на лаві під кутом 30°", "Зведення рук у кросовері", "Жим штанги на лаві з негативним нахилом", "Жим у тренажері Сміта на похилій лаві", "Жим гантелей лежачи на горизонтальній лаві", "Зведення в кросовері знизу вгору", "Розведення гантелей лежачи", "Розведення гантелей на похилій лаві", "Жим у тренажері Сміта лежачи", "Жим гантелей на лаві з негативним нахилом", "Жим гантелей нейтральним хватом", "Пуловер з гантеллю лежачи"], "Трицепс": ["Жим штанги вузьким хватом лежачи", "Розгинання рук на верхньому блоці", "Французький жим зі штангою лежачи", "Розгинання гантелі з-за голови сидячи", "Розгинання рук на блоці з канатом", "Французький жим з гантелями лежачи", "Розгинання гантелі в нахилі", "Розгинання з канатом з-за голови на блоці", "Жим у тренажері Сміта вузьким хватом", "Розгинання на верхньому блоці зворотним хватом", "Розгинання на блоці з V-рукояттю", "Французький жим стоячи зі штангою", "JM-жим", "Жим гантелей вузьким хватом", "Розгинання однією рукою на нижньому блоці"], "Ноги": ["Присідання зі штангою", "Жим ногами", "Гоблет-присідання з гантеллю", "Розгинання ніг сидячи", "Присідання в тренажері Сміта", "Жим ногами вузькою постановкою стоп", "Фронтальні присідання в тренажері Сміта", "Розгинання однієї ноги сидячи", "Присідання зі штангою широкою постановкою", "Присідання з гантелями", "Фронтальні присідання зі штангою", "Присідання до лави зі штангою"], "Біцепс": ["Підйом штанги на біцепс стоячи", "Молоткові згинання з гантелями", "Згинання з гантелями на похилій лаві", "Згинання рук на нижньому блоці", "Згинання зі штангою на лаві Скотта", "Згинання гантелей стоячи з поворотом кисті", "Концентровані згинання з гантеллю", "Молоткові згинання на блоці з канатом", "Згинання гантелі на лаві Скотта", "Підйом штанги вузьким хватом", "Згинання рук на верхніх блоках кросовера", "Згинання з гантелями сидячи", "Згинання зі штангою зворотним хватом", "Згинання Зоттмана", "Згинання на лаві Скотта на блоці", "Молоткові згинання навхрест", "Підйом штанги широким хватом"], "Спина": ["Тяга верхнього блока широким хватом", "Тяга штанги в нахилі", "Тяга нижнього блока сидячи", "Тяга гантелі однією рукою", "Тяга верхнього блока вузьким хватом", "Тяга в тренажері Сміта в нахилі", "Тяга нижнього блока однією рукою", "Пуловер на верхньому блоці прямими руками", "Тяга гантелей у нахилі", "Тяга штанги зворотним хватом у нахилі", "Тяга верхнього блока зворотним хватом", "Тяга верхнього блока V-рукояттю", "Тяга верхнього блока однією рукою", "Тяга гантелей лежачи на похилій лаві", "Шраги зі штангою", "Шраги з гантелями", "Тяга верхнього блока з упором у лаву, пряма штанга (верх найширших)", "Тяга верхнього блока з упором у лаву, EZ-гриф (усі найширші)", "Тяга верхнього блока на колінах широким хватом (низ найширших)", "Тяга верхнього блока сидячи з упором грудьми, вузька рукоять (середина найширших)", "Тяга верхнього блока з упором у лаву, пряма штанга (середина і низ найширших)"], "Плечі": ["Жим гантелей сидячи", "Махи гантелями в сторони", "Тяга штанги до підборіддя широким хватом", "Зворотні розведення в кросовері", "Жим штанги сидячи в тренажері Сміта", "Махи в сторону на нижньому блоці", "Підйом гантелей перед собою", "Тяга каната до обличчя", "Жим штанги стоячи", "Жим Арнольда", "Жим гантелей стоячи", "Махи гантелями в нахилі сидячи", "Підйом руки перед собою на блоці", "Тяга до підборіддя в тренажері Сміта", "Тяга гантелей до підборіддя"], "Задня поверхня стегна і сідниці": ["Румунська тяга зі штангою", "Присідання сумо з гантеллю", "Згинання ніг лежачи", "Нахили вперед зі штангою на плечах", "Румунська тяга з гантелями", "Сідничний місток у тренажері Сміта", "Нахили вперед зі штангою на плечах у Сміті", "Згинання однієї ноги лежачи", "Станова тяга на прямих ногах", "Румунська тяга в тренажері Сміта", "Станова тяга сумо", "Станова тяга", "Тяга каната між ногами"], "Литки": ["Підйом на носки стоячи в тренажері Сміта", "Підйом на носки сидячи", "Підйом на носки в тренажері для жиму ногами", "Підйом на носки на одній нозі з гантеллю", "Підйом на носки стоячи зі штангою", "Підйом на носки сидячи зі штангою", "Підйом на носки сидячи з гантеллю на одній нозі", "Підйом на носки стоячи з гантелями"]};
+const PLAN = {"Жим штанги лежачи": "4 × 8–10", "Жим штанги на похилій лаві": "4 × 8–10", "Жим гантелей на лаві під кутом 30°": "4 × 10–12", "Зведення рук у кросовері": "4 × 12–15", "Жим штанги вузьким хватом лежачи": "4 × 8–10", "Розгинання рук на верхньому блоці": "4 × 12–15", "Французький жим зі штангою лежачи": "4 × 10–12", "Розгинання гантелі з-за голови сидячи": "4 × 12", "Присідання зі штангою": "4 × 8–10", "Жим ногами": "4 × 12", "Гоблет-присідання з гантеллю": "4 × 12", "Розгинання ніг сидячи": "4 × 15", "Підйом штанги на біцепс стоячи": "4 × 10–12", "Молоткові згинання з гантелями": "4 × 12", "Згинання з гантелями на похилій лаві": "4 × 10–12", "Згинання рук на нижньому блоці": "4 × 12–15", "Тяга верхнього блока широким хватом": "4 × 8–10", "Тяга штанги в нахилі": "4 × 8–10", "Тяга нижнього блока сидячи": "4 × 10–12", "Тяга гантелі однією рукою": "4 × 10 на кожну руку", "Жим гантелей сидячи": "4 × 8–10", "Махи гантелями в сторони": "4 × 12–15", "Тяга штанги до підборіддя широким хватом": "4 × 10–12", "Зворотні розведення в кросовері": "4 × 15", "Згинання зі штангою на лаві Скотта": "4 × 10–12", "Згинання гантелей стоячи з поворотом кисті": "4 × 10–12", "Концентровані згинання з гантеллю": "4 × 12 на кожну руку", "Молоткові згинання на блоці з канатом": "4 × 12–15", "Розгинання рук на блоці з канатом": "4 × 12–15", "Французький жим з гантелями лежачи": "4 × 10–12", "Розгинання гантелі в нахилі": "4 × 12 на кожну руку", "Розгинання з канатом з-за голови на блоці": "4 × 12", "Румунська тяга зі штангою": "4 × 8–10", "Присідання сумо з гантеллю": "4 × 12", "Згинання ніг лежачи": "4 × 12–15", "Нахили вперед зі штангою на плечах": "4 × 10–12", "Підйом на носки стоячи в тренажері Сміта": "4 × 15–20", "Підйом на носки сидячи": "4 × 15–20", "Підйом на носки в тренажері для жиму ногами": "4 × 15–20", "Підйом на носки на одній нозі з гантеллю": "4 × 12–15 на кожну", "Жим штанги на лаві з негативним нахилом": "4 × 8–10", "Жим у тренажері Сміта на похилій лаві": "4 × 10", "Жим гантелей лежачи на горизонтальній лаві": "4 × 10–12", "Зведення в кросовері знизу вгору": "4 × 12–15", "Жим у тренажері Сміта вузьким хватом": "4 × 8–10", "Розгинання на верхньому блоці зворотним хватом": "4 × 12–15", "Присідання в тренажері Сміта": "4 × 8–10", "Жим ногами вузькою постановкою стоп": "4 × 12", "Фронтальні присідання в тренажері Сміта": "4 × 10", "Розгинання однієї ноги сидячи": "4 × 12 на кожну", "Згинання гантелі на лаві Скотта": "4 × 10–12 на кожну руку", "Підйом штанги вузьким хватом": "4 × 10–12", "Згинання рук на верхніх блоках кросовера": "4 × 12–15", "Тяга верхнього блока вузьким хватом": "4 × 10–12", "Тяга в тренажері Сміта в нахилі": "4 × 8–10", "Тяга нижнього блока однією рукою": "4 × 12 на кожну руку", "Пуловер на верхньому блоці прямими руками": "4 × 12–15", "Жим штанги сидячи в тренажері Сміта": "4 × 8–10", "Махи в сторону на нижньому блоці": "4 × 12–15 на кожну руку", "Підйом гантелей перед собою": "4 × 12", "Тяга каната до обличчя": "4 × 15", "Румунська тяга з гантелями": "4 × 10–12", "Сідничний місток у тренажері Сміта": "4 × 10–12", "Нахили вперед зі штангою на плечах у Сміті": "4 × 10–12", "Згинання однієї ноги лежачи": "4 × 12 на кожну", "Підйом на носки стоячи зі штангою": "4 × 15–20", "Розведення гантелей лежачи": "4 × 12", "Розведення гантелей на похилій лаві": "4 × 12", "Жим у тренажері Сміта лежачи": "4 × 8–10", "Жим гантелей на лаві з негативним нахилом": "4 × 10–12", "Жим гантелей нейтральним хватом": "4 × 10–12", "Пуловер з гантеллю лежачи": "4 × 12", "Розгинання на блоці з V-рукояттю": "4 × 12–15", "Французький жим стоячи зі штангою": "4 × 10–12", "JM-жим": "4 × 8–10", "Жим гантелей вузьким хватом": "4 × 10–12", "Розгинання однією рукою на нижньому блоці": "4 × 12 на кожну руку", "Присідання зі штангою широкою постановкою": "4 × 8–10", "Присідання з гантелями": "4 × 12", "Фронтальні присідання зі штангою": "4 × 8–10", "Присідання до лави зі штангою": "4 × 10", "Згинання з гантелями сидячи": "4 × 10–12", "Згинання зі штангою зворотним хватом": "4 × 12", "Згинання Зоттмана": "4 × 10–12", "Згинання на лаві Скотта на блоці": "4 × 12", "Молоткові згинання навхрест": "4 × 12", "Підйом штанги широким хватом": "4 × 10–12", "Тяга гантелей у нахилі": "4 × 10–12", "Тяга штанги зворотним хватом у нахилі": "4 × 8–10", "Тяга верхнього блока зворотним хватом": "4 × 10–12", "Тяга верхнього блока V-рукояттю": "4 × 10–12", "Тяга верхнього блока однією рукою": "4 × 12 на кожну руку", "Тяга гантелей лежачи на похилій лаві": "4 × 10–12", "Шраги зі штангою": "4 × 12–15", "Шраги з гантелями": "4 × 12–15", "Жим штанги стоячи": "4 × 8–10", "Жим Арнольда": "4 × 10–12", "Жим гантелей стоячи": "4 × 10", "Махи гантелями в нахилі сидячи": "4 × 12–15", "Підйом руки перед собою на блоці": "4 × 12", "Тяга до підборіддя в тренажері Сміта": "4 × 10–12", "Тяга гантелей до підборіддя": "4 × 12", "Станова тяга на прямих ногах": "4 × 8–10", "Румунська тяга в тренажері Сміта": "4 × 10", "Станова тяга сумо": "4 × 8", "Станова тяга": "4 × 6–8", "Тяга каната між ногами": "4 × 12–15", "Підйом на носки сидячи зі штангою": "4 × 15", "Підйом на носки сидячи з гантеллю на одній нозі": "4 × 15 на кожну", "Підйом на носки стоячи з гантелями": "4 × 15–20", "Тяга верхнього блока з упором у лаву, пряма штанга (верх найширших)": "4 × 10–12", "Тяга верхнього блока з упором у лаву, EZ-гриф (усі найширші)": "4 × 10–12", "Тяга верхнього блока на колінах широким хватом (низ найширших)": "4 × 10–12", "Тяга верхнього блока сидячи з упором грудьми, вузька рукоять (середина найширших)": "4 × 10–12", "Тяга верхнього блока з упором у лаву, пряма штанга (середина і низ найширших)": "4 × 10–12"};
+const IMG = {"Жим штанги лежачи": "barbell_bench_press_-_medium_grip", "Жим штанги на похилій лаві": "barbell_incline_bench_press_-_medium_grip", "Жим гантелей на лаві під кутом 30°": "incline_dumbbell_press", "Зведення рук у кросовері": "cable_crossover", "Жим штанги вузьким хватом лежачи": "close-grip_barbell_bench_press", "Розгинання рук на верхньому блоці": "triceps_pushdown", "Французький жим зі штангою лежачи": "ez-bar_skullcrusher", "Розгинання гантелі з-за голови сидячи": "seated_triceps_press", "Присідання зі штангою": "barbell_squat", "Жим ногами": "leg_press", "Гоблет-присідання з гантеллю": "goblet_squat", "Розгинання ніг сидячи": "leg_extensions", "Підйом штанги на біцепс стоячи": "barbell_curl", "Молоткові згинання з гантелями": "hammer_curls", "Згинання з гантелями на похилій лаві": "incline_dumbbell_curl", "Згинання рук на нижньому блоці": "standing_biceps_cable_curl", "Тяга верхнього блока широким хватом": "wide-grip_lat_pulldown", "Тяга штанги в нахилі": "bent_over_barbell_row", "Тяга нижнього блока сидячи": "seated_cable_rows", "Тяга гантелі однією рукою": "one-arm_dumbbell_row", "Жим гантелей сидячи": "seated_dumbbell_press", "Махи гантелями в сторони": "side_lateral_raise", "Тяга штанги до підборіддя широким хватом": "upright_barbell_row", "Зворотні розведення в кросовері": "cable_rear_delt_fly", "Згинання зі штангою на лаві Скотта": "preacher_curl", "Згинання гантелей стоячи з поворотом кисті": "dumbbell_alternate_bicep_curl", "Концентровані згинання з гантеллю": "concentration_curls", "Молоткові згинання на блоці з канатом": "cable_hammer_curls_-_rope_attachment", "Розгинання рук на блоці з канатом": "triceps_pushdown_-_rope_attachment", "Французький жим з гантелями лежачи": "lying_dumbbell_tricep_extension", "Розгинання гантелі в нахилі": "tricep_dumbbell_kickback", "Розгинання з канатом з-за голови на блоці": "triceps_overhead_extension_with_rope", "Румунська тяга зі штангою": "romanian_deadlift", "Присідання сумо з гантеллю": "plie_dumbbell_squat", "Згинання ніг лежачи": "lying_leg_curls", "Нахили вперед зі штангою на плечах": "good_morning", "Підйом на носки стоячи в тренажері Сміта": "smith_machine_calf_raise", "Підйом на носки сидячи": "seated_calf_raise", "Підйом на носки в тренажері для жиму ногами": "calf_press_on_the_leg_press_machine", "Підйом на носки на одній нозі з гантеллю": "standing_dumbbell_calf_raise", "Жим штанги на лаві з негативним нахилом": "decline_barbell_bench_press", "Жим у тренажері Сміта на похилій лаві": "smith_machine_incline_bench_press", "Жим гантелей лежачи на горизонтальній лаві": "dumbbell_bench_press", "Зведення в кросовері знизу вгору": "low_cable_crossover", "Жим у тренажері Сміта вузьким хватом": "smith_machine_close-grip_bench_press", "Розгинання на верхньому блоці зворотним хватом": "reverse_grip_triceps_pushdown", "Присідання в тренажері Сміта": "smith_machine_squat", "Жим ногами вузькою постановкою стоп": "narrow_stance_leg_press", "Фронтальні присідання в тренажері Сміта": "front_barbell_squat", "Розгинання однієї ноги сидячи": "single-leg_leg_extension", "Згинання гантелі на лаві Скотта": "one_arm_dumbbell_preacher_curl", "Підйом штанги вузьким хватом": "close-grip_standing_barbell_curl", "Згинання рук на верхніх блоках кросовера": "high_cable_curls", "Тяга верхнього блока вузьким хватом": "close-grip_front_lat_pulldown", "Тяга в тренажері Сміта в нахилі": "smith_machine_bent_over_row", "Тяга нижнього блока однією рукою": "seated_one-arm_cable_pulley_rows", "Пуловер на верхньому блоці прямими руками": "straight-arm_pulldown", "Жим штанги сидячи в тренажері Сміта": "smith_machine_overhead_shoulder_press", "Махи в сторону на нижньому блоці": "standing_low-pulley_deltoid_raise", "Підйом гантелей перед собою": "front_two-dumbbell_raise", "Тяга каната до обличчя": "face_pull", "Румунська тяга з гантелями": "stiff-legged_dumbbell_deadlift", "Сідничний місток у тренажері Сміта": "barbell_glute_bridge", "Нахили вперед зі штангою на плечах у Сміті": "good_morning", "Згинання однієї ноги лежачи": "lying_leg_curls", "Підйом на носки стоячи зі штангою": "standing_barbell_calf_raise", "Розведення гантелей лежачи": "dumbbell_flyes", "Розведення гантелей на похилій лаві": "incline_dumbbell_flyes", "Жим у тренажері Сміта лежачи": "smith_machine_bench_press", "Жим гантелей на лаві з негативним нахилом": "decline_dumbbell_bench_press", "Жим гантелей нейтральним хватом": "dumbbell_bench_press_with_neutral_grip", "Пуловер з гантеллю лежачи": "bent-arm_dumbbell_pullover", "Розгинання на блоці з V-рукояттю": "triceps_pushdown_-_v-bar_attachment", "Французький жим стоячи зі штангою": "standing_overhead_barbell_triceps_extension", "JM-жим": "jm_press", "Жим гантелей вузьким хватом": "close-grip_dumbbell_press", "Розгинання однією рукою на нижньому блоці": "standing_low-pulley_one-arm_triceps_extension", "Присідання зі штангою широкою постановкою": "wide_stance_barbell_squat", "Присідання з гантелями": "dumbbell_squat", "Фронтальні присідання зі штангою": "front_barbell_squat", "Присідання до лави зі штангою": "barbell_squat_to_a_bench", "Згинання з гантелями сидячи": "seated_dumbbell_curl", "Згинання зі штангою зворотним хватом": "reverse_barbell_curl", "Згинання Зоттмана": "zottman_curl", "Згинання на лаві Скотта на блоці": "cable_preacher_curl", "Молоткові згинання навхрест": "cross_body_hammer_curl", "Підйом штанги широким хватом": "wide-grip_standing_barbell_curl", "Тяга гантелей у нахилі": "bent_over_two-dumbbell_row", "Тяга штанги зворотним хватом у нахилі": "reverse_grip_bent-over_rows", "Тяга верхнього блока зворотним хватом": "underhand_cable_pulldowns", "Тяга верхнього блока V-рукояттю": "v-bar_pulldown", "Тяга верхнього блока однією рукою": "one_arm_lat_pulldown", "Тяга гантелей лежачи на похилій лаві": "dumbbell_incline_row", "Шраги зі штангою": "barbell_shrug", "Шраги з гантелями": "dumbbell_shrug", "Жим штанги стоячи": "standing_military_press", "Жим Арнольда": "arnold_dumbbell_press", "Жим гантелей стоячи": "standing_dumbbell_press", "Махи гантелями в нахилі сидячи": "seated_bent-over_rear_delt_raise", "Підйом руки перед собою на блоці": "front_cable_raise", "Тяга до підборіддя в тренажері Сміта": "smith_machine_upright_row", "Тяга гантелей до підборіддя": "standing_dumbbell_upright_row", "Станова тяга на прямих ногах": "stiff-legged_barbell_deadlift", "Румунська тяга в тренажері Сміта": "smith_machine_stiff-legged_deadlift", "Станова тяга сумо": "sumo_deadlift", "Станова тяга": "barbell_deadlift", "Тяга каната між ногами": "pull_through", "Підйом на носки сидячи зі штангою": "barbell_seated_calf_raise", "Підйом на носки сидячи з гантеллю на одній нозі": "dumbbell_seated_one-leg_calf_raise", "Підйом на носки стоячи з гантелями": "standing_dumbbell_calf_raise"};
+// program as it was with weeks 1/2: layout for workouts saved before exercises became editable
+const OLD = {"1": {"1": [["Груди", ["Жим штанги лежачи", "Жим штанги на похилій лаві", "Жим гантелей на лаві під кутом 30°", "Зведення рук у кросовері"]], ["Трицепс", ["Жим штанги вузьким хватом лежачи", "Розгинання рук на верхньому блоці", "Французький жим зі штангою лежачи", "Розгинання гантелі з-за голови сидячи"]]], "2": [["Ноги", ["Присідання зі штангою", "Жим ногами", "Гоблет-присідання з гантеллю", "Розгинання ніг сидячи"]], ["Біцепс", ["Підйом штанги на біцепс стоячи", "Молоткові згинання з гантелями", "Згинання з гантелями на похилій лаві", "Згинання рук на нижньому блоці"]]], "3": [["Спина", ["Тяга верхнього блока широким хватом", "Тяга штанги в нахилі", "Тяга нижнього блока сидячи", "Тяга гантелі однією рукою"]], ["Плечі", ["Жим гантелей сидячи", "Махи гантелями в сторони", "Тяга штанги до підборіддя широким хватом", "Зворотні розведення в кросовері"]]], "4": [["Біцепс", ["Згинання зі штангою на лаві Скотта", "Згинання гантелей стоячи з поворотом кисті", "Концентровані згинання з гантеллю", "Молоткові згинання на блоці з канатом"]], ["Трицепс", ["Розгинання рук на блоці з канатом", "Французький жим з гантелями лежачи", "Розгинання гантелі в нахилі", "Розгинання з канатом з-за голови на блоці"]]], "5": [["Задня поверхня стегна і сідниці", ["Румунська тяга зі штангою", "Присідання сумо з гантеллю", "Згинання ніг лежачи", "Нахили вперед зі штангою на плечах"]], ["Литки", ["Підйом на носки стоячи в тренажері Сміта", "Підйом на носки сидячи", "Підйом на носки в тренажері для жиму ногами", "Підйом на носки на одній нозі з гантеллю"]]]}, "2": {"1": [["Груди", ["Жим штанги на лаві з негативним нахилом", "Жим у тренажері Сміта на похилій лаві", "Жим гантелей лежачи на горизонтальній лаві", "Зведення в кросовері знизу вгору"]], ["Трицепс", ["Жим у тренажері Сміта вузьким хватом", "Розгинання на верхньому блоці зворотним хватом", "Розгинання рук на блоці з канатом", "Розгинання з канатом з-за голови на блоці"]]], "2": [["Ноги", ["Присідання в тренажері Сміта", "Жим ногами вузькою постановкою стоп", "Фронтальні присідання в тренажері Сміта", "Розгинання однієї ноги сидячи"]], ["Біцепс", ["Згинання гантелі на лаві Скотта", "Підйом штанги вузьким хватом", "Молоткові згинання на блоці з канатом", "Згинання рук на верхніх блоках кросовера"]]], "3": [["Спина", ["Тяга верхнього блока вузьким хватом", "Тяга в тренажері Сміта в нахилі", "Тяга нижнього блока однією рукою", "Пуловер на верхньому блоці прямими руками"]], ["Плечі", ["Жим штанги сидячи в тренажері Сміта", "Махи в сторону на нижньому блоці", "Підйом гантелей перед собою", "Тяга каната до обличчя"]]], "4": [["Біцепс", ["Підйом штанги на біцепс стоячи", "Згинання з гантелями на похилій лаві", "Молоткові згинання з гантелями", "Концентровані згинання з гантеллю"]], ["Трицепс", ["Французький жим зі штангою лежачи", "Розгинання рук на верхньому блоці", "Розгинання гантелі з-за голови сидячи", "Розгинання гантелі в нахилі"]]], "5": [["Задня поверхня стегна і сідниці", ["Румунська тяга з гантелями", "Сідничний місток у тренажері Сміта", "Нахили вперед зі штангою на плечах у Сміті", "Згинання однієї ноги лежачи"]], ["Литки", ["Підйом на носки сидячи", "Підйом на носки в тренажері для жиму ногами", "Підйом на носки стоячи зі штангою", "Підйом на носки стоячи в тренажері Сміта"]]]}};
+/* extra exercises possible on this gym's equipment (Smith + two cable towers, adjustable benches, racks, leg machines, preacher bench, dumbbells) */
+const EXTRA = {
+  "Груди": [["Зведення рук у кросовері на рівні грудей","4 × 12–15"],["Жим однією рукою на блоці стоячи","4 × 12 на кожну руку"],["Жим гантелей на похилій лаві нейтральним хватом","4 × 10–12"]],
+  "Трицепс": [["Розгинання однією рукою на верхньому блоці","4 × 12–15 на кожну руку"],["Французький жим у тренажері Сміта лежачи","4 × 10–12"]],
+  "Ноги": [["Сплит-присідання в тренажері Сміта","4 × 10 на кожну"],["Болгарські присідання з гантелями","4 × 10 на кожну"],["Присідання з упором у лаву в тренажері Сміта (ноги вперед)","4 × 10–12"]],
+  "Біцепс": [["Згинання на нижньому блоці з канатом","4 × 12–15"],["Згинання однією рукою на нижньому блоці","4 × 12 на кожну руку"],["Згинання на лаві Скотта з EZ-грифом","4 × 10–12"]],
+  "Спина": [["Тяга нижнього блока широким хватом","4 × 10–12"],["Тяга до грудей у кросовері двома руками","4 × 12"]],
+  "Плечі": [["Махи в сторони в кросовері двома руками","4 × 12–15"],["Зворотні розведення гантелей лежачи на похилій лаві","4 × 12–15"],["Жим однією гантеллю стоячи","4 × 10 на кожну руку"]],
+  "Задня поверхня стегна і сідниці": [["Відведення ноги назад на нижньому блоці","4 × 12–15 на кожну"],["Сідничний місток зі штангою на лаві","4 × 10–12"],["Румунська тяга на одній нозі з гантеллю","4 × 10 на кожну"]],
+  "Литки": [["Підйом на носки в тренажері Сміта на платформі","4 × 15–20"]]
+};
+Object.entries(EXTRA).forEach(([g, list]) => list.forEach(([n, p]) => { if (!LIB[g].includes(n)) LIB[g].push(n); if (!PLAN[n]) PLAN[n] = p; }));
+OLD[1][6] = [];
+const SETS = 4;
+const $ = id => document.getElementById(id);
+const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
+const fmtDate = s => { const [y,m,d] = s.split("-"); return `${d}.${m}.${y}`; };
+const clone = o => JSON.parse(JSON.stringify(o));
+const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
+const gl = g => GROUP_LABEL[g] || g;
+
+let db = null, col = null, cfgRef = null;
+let all = {};
+let cfg = {days:{}, custom:{}};
+let cur = null;          // open workout, or null on the start screen
+let openKey = null, showImg = {}, pick = null;   // pick = {gi, si|null}
+let firstSnap = true, saveTimer = null, writing = Promise.resolve(), dirty = false, cfgWriting = 0;
+
+function dayLayout(day){
+  if (day === 6) return [];
+  const saved = cfg.days && cfg.days[day];
+  const ok = Array.isArray(saved) && saved.length === DAYS[day].g.length && saved.every((x,i) => x && x.g === DAYS[day].g[i] && Array.isArray(x.n));
+  return ok ? clone(saved) : OLD[1][day].map(([g, n]) => ({g, n:[...n]}));
+}
+function blank(day, date){
+  return {id:`d${day}-${Date.now().toString(36)}`, day, date: date || today(), start:"", end:"", kcal:"", lay:dayLayout(day), ex:{}, bike:{}};
+}
+function fromDoc(id, d){
+  const ex = {};
+  (d.ex || []).forEach(e => ex[e.n] = (e.s || []).map(s => ({w:s.w||"", r:s.r||""})));
+  const lay = Array.isArray(d.lay) ? clone(d.lay) : (d.week && OLD[d.week] ? (OLD[d.week][d.day] || []).map(([g, n]) => ({g, n:[...n]})) : dayLayout(d.day));
+  return {id, week:d.week, day:d.day, date:d.date, start:d.start||"", end:d.end||"", kcal:d.kcal||"", lay, ex, bike:clone(d.bike || {})};
+}
+function hasData(w){ return !!(w.start || w.end || w.kcal) || Object.values(w.bike || {}).some(Boolean) || Object.values(w.ex).some(s => s.some(x => x.w || x.r)); }
+function durText(s, e){
+  if (!s || !e) return "";
+  const m = t => t[0]*60 + t[1];
+  let d = m(e.split(":").map(Number)) - m(s.split(":").map(Number));
+  if (d < 0) d += 1440;
+  const h = Math.floor(d/60), mm = d % 60;
+  return (h ? `${h} год ` : "") + `${mm} хв`;
+}
+function sorted(){ return Object.entries(all).map(([id,d]) => ({id, ...d})).sort((a,b) => b.date.localeCompare(a.date) || (b.updated||0)-(a.updated||0)); }
+function status(t, cls){ const s = $("status"); s.textContent = t; s.className = cls || ""; }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function attr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+
+/* ---------- start screen ---------- */
+function lastOf(day){ return sorted().find(r => r.day === day); }
+function suggestion(){
+  const strength = sorted().find(r => r.day >= 1 && r.day <= 5);
+  return strength ? strength.day % 5 + 1 : 1;
+}
+function ago(date){
+  const d = Math.round((new Date(today()) - new Date(date)) / 864e5);
+  return d === 0 ? "сьогодні" : d === 1 ? "вчора" : `${d} дн. тому`;
+}
+function renderPick(){
+  const sug = suggestion();
+  $("types").innerHTML = ORDER.concat(6).map(d => {
+    const l = lastOf(d);
+    const info = d === sug ? "Пропоную сьогодні" : (l ? `Було ${ago(l.date)}` : "Ще не було");
+    return `<button class="type${d === sug ? " sug" : ""}${d === 6 ? " bike" : ""}" type="button" data-type="${d}"><b>${DAYS[d].t}</b><small>${info}</small></button>`;
+  }).join("");
+}
+
+/* ---------- workout screen ---------- */
+function prevFor(name){
+  let best = null;
+  for (const [id, d] of Object.entries(all)){
+    if (id === cur.id || d.date > cur.date) continue;
+    const e = (d.ex || []).find(e => e.n === name);
+    if (!e || !e.s.some(s => s.w || s.r)) continue;
+    if (!best || d.date > best.date || (d.date === best.date && (d.updated||0) > (best.updated||0))) best = {date:d.date, updated:d.updated, s:e.s};
+  }
+  return best;
+}
+function doneCount(name){ return (cur.ex[name] || []).filter(s => s.w || s.r).length; }
+function slotName(key){ const [gi, si] = key.split("-").map(Number); return cur.lay[gi].n[si]; }
+function keys(){ const k = []; cur.lay.forEach((g, gi) => g.n.forEach((_, si) => k.push(`${gi}-${si}`))); return k; }
+function firstOpen(){ return keys().find(k => doneCount(slotName(k)) < SETS) || null; }
+function setsOf(name){ return cur.ex[name] || (cur.ex[name] = Array.from({length:SETS}, () => ({w:"", r:""}))); }
+
+function renderHeader(){
+  const work = !!cur;
+  $("backBtn").hidden = !work;
+  $("dateWrap").hidden = !work;
+  $("title").textContent = work ? DAYS[cur.day].t : "Щоденник тренувань";
+  if (work){
+    $("date").value = cur.date;
+    $("dateLbl").textContent = cur.date === today() ? `сьогодні, ${fmtDate(cur.date).slice(0,5)}` : fmtDate(cur.date);
+  }
+}
+function renderSession(){
+  $("start").value = cur.start; $("end").value = cur.end; $("kcal").value = cur.kcal;
+  updDur();
+}
+function updDur(){
+  const d = durText(cur.start, cur.end);
+  $("dur").innerHTML = d ? `Тривалість: <b>${d}</b>` : (cur.start ? `Почав о <b>${cur.start}</b>` : "Час можна виправити вручну в полях вище");
+  const g = $("goBtn");
+  g.hidden = !!(cur.start && cur.end);
+  g.textContent = cur.start ? "■ Закінчити тренування" : "▶ Почати тренування";
+  g.classList.toggle("stop", !!cur.start);
+}
+function renderBike(){
+  const isBike = cur.day === 6;
+  $("bikeBox").hidden = !isBike;
+  if (!isBike) return;
+  const b = cur.bike || {};
+  [["bmin","min"],["bkm","km"],["blvl","lvl"],["bhr","hr"]].forEach(([id,k]) => { if (document.activeElement !== $(id)) $(id).value = b[k] || ""; });
+  const prev = sorted().find(r => r.day === 6 && r.id !== cur.id && r.date <= cur.date);
+  const pb = prev && prev.bike || {};
+  $("bikePrev").textContent = prev ? `Минулого разу (${fmtDate(prev.date).slice(0,5)}): ${pb.min || "–"} хв, ${pb.km || "–"} км${pb.lvl ? `, рівень ${pb.lvl}` : ""}${prev.kcal ? `, ${prev.kcal} ккал` : ""}` : "Ккал впиши вгорі, в полі «Ккал».";
+}
+function renderList(){
+  if (cur.day === 6){ $("list").innerHTML = ""; return; }
+  let html = "", n = 0;
+  const ks = keys();
+  cur.lay.forEach((grp, gi) => {
+    html += `<div class="group"><span>${esc(gl(grp.g))}</span></div>`;
+    grp.n.forEach((name, si) => {
+      n++;
+      const key = `${gi}-${si}`, open = key === openKey;
+      const vals = cur.ex[name] || [];
+      const pv = prevFor(name);
+      const dc = doneCount(name);
+      const prevShort = pv ? pv.s.filter(s=>s.w||s.r).map(s => `${s.w||"–"}×${s.r||"–"}`).join(", ") : "";
+      const sub = pv ? `Мин. раз: ${esc(prevShort)}` : (PLAN[name] ? `План ${PLAN[name]}` : "Ще не робив");
+      html += `<div class="ex${open ? " open" : ""}"><button class="exhead" type="button" data-tog="${key}" aria-expanded="${open}"><span class="nm">${n}. ${esc(name)}${open ? "" : `<small>${sub}</small>`}</span><span class="badge${dc >= SETS ? " done" : dc ? " part" : ""}">${dc >= SETS ? "✓" : `${dc}/${SETS}`}</span></button>`;
+      if (open){
+        let rows = "";
+        for (let i=0;i<SETS;i++){
+          const v = vals[i] || {}, p = pv && pv.s[i] ? pv.s[i] : {};
+          const cell = (k, lbl) => `<div class="cell"><span>${lbl}</span><input id="${cur.id}-${key}-${k}${i}" data-n="${attr(name)}" data-i="${i}" data-k="${k}" inputmode="${k==="w"?"decimal":"numeric"}" autocomplete="off" aria-label="Підхід ${i+1}, ${k==="w"?"вага lb":"повтори"}" value="${attr(v[k]||"")}" placeholder="${attr(p[k]||"")}" class="${v[k]?"filled":""}"></div>`;
+          rows += `<div class="setrow"><span class="no">${i+1}</span>${cell("w","lb")}<span class="x">×</span>${cell("r","повт")}<button class="same" type="button" data-same="${key}" data-i="${i}" ${p.w||p.r ? "" : "disabled"} aria-label="Підхід ${i+1} як минулого разу">як<br>мин.</button></div>`;
+        }
+        const nextKey = ks[ks.indexOf(key)+1];
+        html += `<div class="exbody">
+          <div class="plan">${PLAN[name] ? `План: <b>${PLAN[name]}</b>` : ""}${pv ? `${PLAN[name] ? " · " : ""}минулого разу ${fmtDate(pv.date).slice(0,5)}` : ""}</div>
+          <div class="sets">${rows}</div>
+          <div class="tools">
+            ${pv ? `<button class="tool acc" type="button" data-copy="${attr(name)}">Усі як минулого разу</button>` : ""}
+            ${IMG[name] ? `<button class="tool" type="button" data-img="${key}">${showImg[key] ? "Сховати техніку" : "Техніка"}</button>` : ""}
+            <button class="tool" type="button" data-chg="${key}">Замінити вправу</button>
+            ${grp.n.length > 1 ? `<button class="tool red" type="button" data-rm="${key}">Прибрати</button>` : ""}
+          </div>
+          ${showImg[key] && IMG[name] ? `<img class="how" decoding="async" src="img/${IMG[name]}.jpg" alt="Техніка: ${attr(name)}, зліва початок руху, справа кінець">` : ""}
+          ${nextKey ? `<button class="next" type="button" data-tog="${nextKey}">Наступна вправа ›</button>` : ""}
+        </div>`;
+      }
+      html += `</div>`;
+    });
+    html += `<button class="addex" type="button" data-addg="${gi}">＋ Додати вправу: ${esc(gl(grp.g).toLowerCase())}</button>`;
+  });
+  $("list").innerHTML = html;
+}
+function refreshBadge(name){
+  const key = keys().find(k => slotName(k) === name);
+  const head = document.querySelector(`.exhead[data-tog="${key}"] .badge`);
+  if (!head) return;
+  const dc = doneCount(name);
+  head.className = "badge" + (dc >= SETS ? " done" : dc ? " part" : "");
+  head.textContent = dc >= SETS ? "✓" : `${dc}/${SETS}`;
+}
+function renderHist(){
+  const rows = sorted().slice(0, 15);
+  $("histEmpty").hidden = rows.length > 0;
+  $("hist").innerHTML = rows.map(r => `<li><button type="button" data-open="${attr(r.id)}" class="${cur && r.id===cur.id?"cur":""}"><span>${(DAYS[r.day] || {t:"Тренування"}).t}</span><span>${fmtDate(r.date)}${r.kcal ? ` · ${esc(r.kcal)} ккал` : ""}</span></button></li>`).join("");
+}
+function render(){
+  renderHeader();
+  $("vPick").hidden = !!cur; $("vWork").hidden = !cur;
+  if (!cur){ renderPick(); renderHist(); return; }
+  if (openKey == null) openKey = firstOpen();
+  renderSession(); renderBike(); renderList();
+  const saved = !!all[cur.id];
+  $("delBtn").hidden = !saved; $("delYes").hidden = true; $("delNo").hidden = true;
+  renderHist();
+}
+function resetView(){ openKey = null; showImg = {}; }
+
+/* ---------- exercise picker ---------- */
+function openPicker(gi, si){
+  pick = {gi, si};
+  const g = cur.lay[gi].g, curName = si == null ? null : cur.lay[gi].n[si];
+  const used = new Set(cur.lay.flatMap(x => x.n));
+  const names = [...LIB[g]];
+  ((cfg.custom || {})[g] || []).forEach(n => { if (!names.includes(n)) names.push(n); });
+  $("shTitle").textContent = si == null ? `Додати: ${gl(g).toLowerCase()}` : `Замінити вправу`;
+  $("shBody").innerHTML = `<div class="customrow"><input id="cname" maxlength="80" placeholder="Своя вправа: впиши назву" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="button" data-cadd="1">Додати</button></div>`
+    + names.map(n => {
+      const isCur = n === curName, dis = !isCur && used.has(n);
+      return `<button class="opt${isCur ? " cur" : ""}" type="button" data-pickn="${attr(n)}" ${dis ? "disabled" : ""}>${IMG[n] ? `<img loading="lazy" decoding="async" src="img/${IMG[n]}.jpg" alt="">` : `<span class="noimg"></span>`}<span><b>${esc(n)}</b><small>${isCur ? "зараз у тренуванні" : dis ? "вже є в цьому тренуванні" : (PLAN[n] || "своя вправа")}</small></span></button>`;
+    }).join("");
+  $("sheet").hidden = false; document.body.style.overflow = "hidden"; $("shBody").scrollTop = 0;
+}
+function closePicker(){ $("sheet").hidden = true; document.body.style.overflow = ""; pick = null; }
+function applyPick(name){
+  if (!pick) return;
+  const {gi, si} = pick, grp = cur.lay[gi];
+  if (si == null){ grp.n.push(name); openKey = `${gi}-${grp.n.length - 1}`; }
+  else {
+    const old = grp.n[si];
+    if (name !== old){ delete cur.ex[old]; grp.n[si] = name; }
+    openKey = `${gi}-${si}`;
+  }
+  rememberLayout();
+  closePicker(); render();
+  if (all[cur.id] || hasData(cur)) scheduleSave();
+}
+function addCustom(){
+  const inp = $("cname"); if (!inp) return;
+  const name = inp.value.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!name) { inp.focus(); return; }
+  if (cur.lay.some(x => x.n.includes(name))) { status("Ця вправа вже є в тренуванні", "err"); inp.focus(); return; }
+  const g = cur.lay[pick.gi].g;
+  cfg.custom = cfg.custom || {};
+  const list = cfg.custom[g] || (cfg.custom[g] = []);
+  if (!LIB[g].includes(name) && !list.includes(name)) list.push(name);
+  applyPick(name);
+}
+function rememberLayout(){
+  if (cur.day === 6) return;
+  cfg.days = cfg.days || {};
+  cfg.days[cur.day] = clone(cur.lay);
+  saveCfg();
+}
+function saveCfg(){
+  if (!cfgRef) return;
+  cfgWriting++;
+  const data = clone(cfg);
+  writing = writing.then(() => cfgRef.set(data)).catch(() => status("Не вдалося зберегти вибір вправ", "err")).finally(() => cfgWriting--);
+}
+
+/* ---------- saving (same format as before, plus bike) ---------- */
+function scheduleSave(){
+  dirty = true;
+  clearTimeout(saveTimer);
+  status(db ? "Зберігаю…" : "Немає з'єднання, дані не збережуться", db ? "" : "err");
+  saveTimer = setTimeout(save, 700);
+}
+function save(){
+  saveTimer = null;
+  if (!col || !cur) return;
+  const w = cur;
+  if (!hasData(w) && !all[w.id]) { dirty = false; status("Готово"); return; }
+  const doc = {day:w.day, date:w.date, start:w.start, end:w.end, kcal:w.kcal, updated:Date.now(), lay:clone(w.lay),
+    ex: Object.entries(w.ex).map(([n,s]) => ({n, s:s.map(x => ({w:x.w, r:x.r}))}))};
+  if (w.week) doc.week = w.week;
+  if (w.day === 6) doc.bike = clone(w.bike || {});
+  all[w.id] = doc;
+  writing = writing.then(() => col.doc(w.id).set(doc)).then(() => {
+    if (w === cur) { dirty = false; status("Збережено ✓", "ok"); if ($("delYes").hidden) $("delBtn").hidden = false; renderHist(); }
+  }).catch(e => status(e && e.code === "invalid_argument" ? "Немає прав на запис" : "Не вдалося зберегти, спробуйте ще", "err"));
+}
+function flush(){ if (saveTimer){ clearTimeout(saveTimer); saveTimer = null; if (dirty) save(); } }
+
+function startType(day){
+  const t = today();
+  const same = sorted().find(r => r.day === day && r.date === t);
+  cur = same ? fromDoc(same.id, same) : blank(day, t);
+  resetView(); render(); window.scrollTo(0,0);
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button, [data-close]"); if (!b) return;
+  const ds = b.dataset;
+  if (ds.close) return closePicker();
+  if (ds.type) return startType(+ds.type);
+  if (ds.open){ flush(); cur = fromDoc(ds.open, all[ds.open]); resetView(); render(); window.scrollTo(0,0); return; }
+  if (ds.pickn) return applyPick(ds.pickn);
+  if (ds.cadd) return addCustom();
+  if (ds.tog){
+    const k = ds.tog;
+    openKey = openKey === k && b.classList.contains("exhead") ? "" : k;
+    renderList();
+    if (openKey) document.querySelector(`.exhead[data-tog="${openKey}"]`)?.scrollIntoView({block:"start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+    return;
+  }
+  if (ds.same){
+    const name = slotName(ds.same), pv = prevFor(name), i = +ds.i;
+    if (!pv || !pv.s[i]) return;
+    setsOf(name)[i] = {w: pv.s[i].w || "", r: pv.s[i].r || ""};
+    renderList(); scheduleSave(); return;
+  }
+  if (ds.copy){
+    const pv = prevFor(ds.copy); if (!pv) return;
+    cur.ex[ds.copy] = Array.from({length:SETS}, (_,i) => ({w:(pv.s[i]||{}).w||"", r:(pv.s[i]||{}).r||""}));
+    renderList(); scheduleSave(); return;
+  }
+  if (ds.img){ showImg[ds.img] = !showImg[ds.img]; renderList(); return; }
+  if (ds.chg){ const [gi, si] = ds.chg.split("-").map(Number); return openPicker(gi, si); }
+  if (ds.addg != null){ return openPicker(+ds.addg, null); }
+  if (ds.rm){
+    const [gi, si] = ds.rm.split("-").map(Number);
+    const name = cur.lay[gi].n[si];
+    if (b.dataset.sure !== "1"){ b.dataset.sure = "1"; b.textContent = "Точно прибрати?"; return; }
+    cur.lay[gi].n.splice(si, 1); delete cur.ex[name]; openKey = null;
+    rememberLayout(); render(); if (all[cur.id] || hasData(cur)) scheduleSave(); return;
+  }
+  switch (b.id){
+    case "backBtn": flush(); cur = null; render(); window.scrollTo(0,0); return;
+    case "goBtn": if (!cur.start) cur.start = nowHM(); else cur.end = nowHM(); renderSession(); scheduleSave(); return;
+    case "delBtn": $("delBtn").hidden = true; $("delYes").hidden = false; $("delNo").hidden = false; return;
+    case "delNo": $("delBtn").hidden = false; $("delYes").hidden = true; $("delNo").hidden = true; return;
+    case "delYes": {
+      clearTimeout(saveTimer); saveTimer = null; dirty = false;
+      const id = cur.id; delete all[id];
+      if (col) writing = writing.then(() => col.doc(id).delete()).then(() => status("Видалено", "ok")).catch(() => status("Не вдалося видалити", "err"));
+      cur = null; render(); return;
+    }
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.id === "cname"){ e.preventDefault(); addCustom(); }
+  if (e.key === "Escape" && !$("sheet").hidden) closePicker();
+});
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (!cur) return;
+  if (t.id === "date"){ if (t.value){ cur.date = t.value; renderHeader(); renderList(); renderBike(); scheduleSave(); } return; }
+  if (t.id === "start" || t.id === "end"){ cur[t.id] = t.value; updDur(); scheduleSave(); return; }
+  if (t.id === "kcal"){ const v = t.value.replace(/\D/g, ""); if (v !== t.value) t.value = v; cur.kcal = v; scheduleSave(); return; }
+  const bk = {bmin:"min", bkm:"km", blvl:"lvl", bhr:"hr"}[t.id];
+  if (bk){ const v = t.value.replace(",", ".").replace(bk === "km" ? /[^\d.]/g : /\D/g, ""); if (v !== t.value) t.value = v; cur.bike = cur.bike || {}; cur.bike[bk] = v; scheduleSave(); return; }
+  if (!t.dataset.n) return;
+  const v = t.value.replace(",", ".").replace(/[^\d.]/g, "");
+  if (v !== t.value) t.value = v;
+  t.classList.toggle("filled", !!v);
+  setsOf(t.dataset.n)[+t.dataset.i][t.dataset.k] = v;
+  refreshBadge(t.dataset.n);
+  scheduleSave();
+});
+document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
+
+render();
+
+(async () => {
+  try { db = await window.claude?.use?.("db"); } catch { db = null; }
+  if (!db){ status("Немає з'єднання, дані не збережуться", "err"); return; }
+  col = db.collection("workouts");
+  cfgRef = db.doc("config/main");
+  status("Завантаження…");
+  let cfgReady = false, wReady = false;
+  const boot = () => {
+    if (!firstSnap || !cfgReady || !wReady) return;
+    firstSnap = false;
+    if (!cur){ const t = sorted().find(r => r.date === today()); if (t) cur = fromDoc(t.id, t); }
+    render();
+    status("Готово");
+  };
+  cfgRef.onSnapshot(snap => {
+    if (cfgWriting) return;
+    cfg = snap.exists ? Object.assign({days:{}, custom:{}}, snap.data()) : {days:{}, custom:{}};
+    if (!cfgReady){ cfgReady = true; boot(); return; }
+    if (cur && !all[cur.id] && !hasData(cur) && !pick){ cur.lay = dayLayout(cur.day); renderList(); }
+  }, () => { cfgReady = true; boot(); });
+  col.onSnapshot(snap => {
+    const next = {};
+    snap.docs.forEach(d => { if (d.exists) next[d.id] = d.data(); });
+    if (dirty && cur && all[cur.id]) next[cur.id] = all[cur.id];
+    all = next;
+    if (!wReady){ wReady = true; boot(); return; }
+    const busy = ["INPUT","SELECT"].includes(document.activeElement?.tagName) || pick;
+    if (cur && !dirty && all[cur.id] && !busy){ cur = fromDoc(cur.id, all[cur.id]); render(); }
+    else if (!cur) render();
+    else renderHist();
+  }, () => status("Немає зв'язку з базою", "err"));
+})();
+/* ---------- backup / transfer ---------- */
+(function(){
+  const APP = "gym";
+  const inApp = !!window.APPDB;
+  const el = id => document.getElementById(id);
+  el("bkApp").hidden = !inApp; el("bkClaude").hidden = inApp; el("bkPasteBox").hidden = !inApp;
+  el("bkInfo").textContent = inApp
+    ? "Записи зберігаються на цьому телефоні. Раз на тиждень зберігай копію у файл. Надішли файл Claude, якщо хочеш, щоб він проаналізував твої результати."
+    : "Ця кнопка копіює всі записи, щоб перенести їх у застосунок на телефоні: відкрий застосунок, вкладка з записами, встав і натисни «Перенести записи».";
+  const msg = t => { el("bkMsg").textContent = t; };
+  const pack = () => JSON.stringify({app: APP, v: 1, at: new Date().toISOString(), docs: (() => { const o = {}; Object.entries(all).forEach(([id, d]) => o["workouts/" + id] = d); o["config/main"] = cfg; return o; })()});
+  const fname = () => `${APP === "food" ? "kalorii" : "trenuvannia"}-${new Date().toISOString().slice(0,10)}.json`;
+  el("bkCopy").addEventListener("click", () => {
+    const t = pack();
+    const done = () => msg(`Скопійовано (${Object.keys(JSON.parse(t).docs).length} записів). Тепер відкрий застосунок і встав.`);
+    try { navigator.clipboard.writeText(t).then(done, () => fallback(t)); } catch (e) { fallback(t); }
+  });
+  function fallback(t){ el("bkPasteBox").hidden = false; el("bkPaste").value = t; el("bkPaste").select(); msg("Виділи весь текст вище і скопіюй його вручну."); }
+  if (!inApp) return;
+  el("bkSave").addEventListener("click", () => {
+    const blob = new Blob([pack()], {type: "application/json"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname(); document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); msg("Файл збережено в «Завантаження».");
+  });
+  el("bkShare").addEventListener("click", async () => {
+    try {
+      const file = new File([pack()], fname(), {type: "application/json"});
+      if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: fname()}); msg("Готово."); }
+      else el("bkSave").click();
+    } catch (e) { if (e && e.name !== "AbortError") msg("Не вдалося надіслати, збережи у файл."); }
+  });
+  async function doImport(text){
+    let o; try { o = JSON.parse(text); } catch (e) { msg("Це не схоже на записи щоденника. Скопіюй ще раз."); return; }
+    if (!o || o.app !== APP || !o.docs) { msg(APP === "food" ? "Це записи не з щоденника калорій." : "Це записи не з щоденника тренувань."); return; }
+    const n = await window.APPDB.importDocs(o.docs);
+    msg(`Перенесено ${n} записів.`); setTimeout(() => location.reload(), 800);
+  }
+  el("bkImport").addEventListener("click", () => doImport(el("bkPaste").value.trim()));
+  el("bkFile").addEventListener("change", e => { const f = e.target.files[0]; if (!f) return; f.text().then(doImport); e.target.value = ""; });
+})();
+</script>
+
+</body></html>
