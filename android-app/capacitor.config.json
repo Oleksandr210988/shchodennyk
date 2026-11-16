@@ -1,0 +1,6 @@
+{
+  "appId": "io.github.oleksandr210988.shchodennyk",
+  "appName": "Щоденник",
+  "webDir": "www",
+  "android": { "backgroundColor": "#f3f5f2" }
+}
