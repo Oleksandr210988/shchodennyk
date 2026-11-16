@@ -52,12 +52,12 @@
       <p>${here}</p><p>Натисніть кнопку, потім відкрийте Android-застосунок «Щоденник», вкладка «Годинник», і вставте.</p>
       <button class="btn" id="cpAll" type="button">Скопіювати всі записи</button>
       <button class="btn sec" id="saveAll" type="button">Зберегти копію у файл</button><p id="trMsg" role="status"></p></section>`;
-    return `<section class="card"><h2>Перенести записи з телефону</h2>
+    return `<details class="card"><summary><b>Перенести записи з телефону</b></summary>
       <p>${here}</p><p>У старому застосунку «Щоденник» (з Chrome) відкрийте вкладку «Годинник» і натисніть «Скопіювати всі записи». Потім поверніться сюди, утримуйте палець у полі нижче і виберіть «Вставити».</p>
       <textarea id="pasteAll" placeholder="Вставте сюди скопійовані записи" aria-label="Скопійовані записи"></textarea>
       <button class="btn" id="impAll" type="button">Перенести записи</button>
       <label class="btn sec" style="display:grid;place-items:center">Або вибрати файл копії<input id="fileAll" type="file" accept=".json,application/json,text/plain" hidden></label>
-      <p id="trMsg" role="status"></p></section>`;
+      <p id="trMsg" role="status"></p></details>`;
   }
   function wireTransfer() {
     const msg = (t, ok) => { const m = $("trMsg"); if (m) { m.className = ok ? "ok" : "err"; m.textContent = t; } };
@@ -170,12 +170,12 @@
       syncToday();
       const st0 = S[t] || 0, eaten = eatenOn(today), burned = T[t];
       let html = `<h1>Годинник</h1><section class="card"><h2>Сьогодні</h2><div class="stats">
-        <div class="stat" style="grid-column:1/-1"><span>Кроки</span><b>${fmt(st0)} <span>з 10 000</span></b><div class="bar"><i style="width:${Math.min(100, st0 / 100)}%"></i></div></div>
-        <div class="stat"><span>Активні калорії</span><b>${A[t] != null ? fmt(A[t]) : "–"}</b></div>
-        <div class="stat"><span>Усього спалено</span><b>${burned != null ? fmt(burned) : "–"}</b></div>
-        <div class="stat"><span>Пульс у спокої</span><b>${R[t] != null ? fmt(R[t]) : "–"}</b></div>
-        <div class="stat"><span>Пульс за день</span><b>${hrToday ? fmt(hrToday.values.average || hrToday.value) : "–"}</b>${hrToday && hrToday.values.max ? `<span>від ${fmt(hrToday.values.min)} до ${fmt(hrToday.values.max)}</span>` : ""}</div>
-        ${sleepMin ? `<div class="stat" style="grid-column:1/-1"><span>Сон минулої ночі</span><b>${Math.floor(sleepMin / 60)} год ${Math.round(sleepMin % 60)} хв</b></div>` : ""}
+        <div class="stat wide"><span>Кроки</span><b>${fmt(st0)} <span>з 15 000</span></b><div class="bar"><i style="width:${Math.min(100, st0 / 150)}%"></i></div></div>
+        <div class="stat"><span>Активні ккал</span><b>${A[t] != null ? fmt(A[t]) : "–"}</b></div>
+        <div class="stat"><span>Спалено ккал</span><b>${burned != null ? fmt(burned) : "–"}</b></div>
+        <div class="stat"><span>Пульс спокою</span><b>${R[t] != null ? fmt(R[t]) : "–"}</b></div>
+        <div class="stat"><span>Пульс сер.</span><b>${hrToday ? fmt(hrToday.values.average || hrToday.value) : "–"}</b>${hrToday && hrToday.values.max ? `<span>${fmt(hrToday.values.min)}–${fmt(hrToday.values.max)}</span>` : ""}</div>
+        ${sleepMin ? `<div class="stat"><span>Сон</span><b>${Math.floor(sleepMin / 60)}:${String(Math.round(sleepMin % 60)).padStart(2, "0")}</b></div>` : ""}
       </div></section>`;
       if (eaten != null && burned != null) {
         const diff = burned - eaten;
@@ -183,6 +183,12 @@
           <p><b class="${diff >= 0 ? "ok" : "err"}">${diff >= 0 ? "Дефіцит " + fmt(diff) : "Перебір " + fmt(-diff)} ккал</b></p>
           <p>Вечір ще попереду, тож дефіцит до кінця дня зазвичай ще трохи зросте.</p></section>`;
       }
+      const NAMES = {steps: "кроки", calories: "активні калорії", totalCalories: "спалені калорії", heartRate: "пульс", restingHeartRate: "пульс спокою", sleep: "сон", workouts: "тренування"};
+      const missing = READ.filter(k => !ok.includes(k));
+      if (missing.length) html += `<section class="card"><h2>Немає доступу: ${missing.map(k => NAMES[k]).join(", ")}</h2>
+        <p>Натисніть кнопку і в Health Connect увімкніть усі пункти для «Щоденника». Також у Samsung Health → ⋮ → Налаштування → Health Connect мають бути увімкнені всі дані.</p>
+        <button class="btn" id="askAgain" type="button">Дати доступ до всього</button></section>`;
+      else if (A[t] == null && T[t] == null && !hrToday) html += `<section class="card"><p>Доступ є, але Samsung Health ще не передав калорії і пульс. Перевірте: Samsung Health → ⋮ → Налаштування → Health Connect, там мають бути увімкнені всі дані. Потім відкрийте Samsung Health на кілька секунд і натисніть «Оновити».</p></section>`;
       html += `<section class="card"><h2>Останні 7 днів</h2><table><thead><tr><th>День</th><th>Кроки</th><th>Спалено</th><th>З'їдено</th></tr></thead><tbody>`;
       for (let i = 0; i < 7; i++) {
         const d = new Date(today); d.setDate(d.getDate() - i); const k = ymd(d); const e = eatenOn(d);
@@ -202,6 +208,13 @@
       body.innerHTML = html;
       $("refresh").onclick = () => { busy = false; renderWatch(); };
       $("hcSet").onclick = () => Health.openHealthConnectSettings().catch(() => {});
+      if ($("askAgain")) $("askAgain").onclick = async () => {
+        let r = null;
+        try { r = await Health.requestAuthorization({read: READ, requestHistoryAccess: true}); } catch (e) {}
+        const got = (r && r.readAuthorized) || [];
+        if (READ.some(k => !got.includes(k) && !ok.includes(k))) Health.openHealthConnectSettings().catch(() => {});
+        busy = false; renderWatch();
+      };
       wireTransfer();
     } catch (e) {
       body.innerHTML = `<h1>Годинник</h1><section class="card"><p class="err">Помилка: ${esc(e.message)}</p><button class="btn" id="refresh" type="button">Спробувати ще раз</button></section>` + transferCard();
