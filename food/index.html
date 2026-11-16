@@ -198,6 +198,17 @@ tr.cur td{background:var(--accent-soft)}
 .bk button{height:48px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:600;padding:0 14px;flex:1 1 160px}
 .bk textarea{width:100%;min-height:90px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:10px;font-size:13px}
 .bk .msg{font-size:14px;margin:0}
+.newprod{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 16px;border-radius:16px;border:2px dashed var(--accent);background:var(--card);text-align:left}
+.newprod b{font-size:16px;color:var(--accent)} .newprod small{display:block;font-size:13px;color:var(--muted)}
+.newprod span.plus2{font-size:30px;color:var(--accent);line-height:1}
+.scanrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scanbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:84px;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:15px;text-align:center;cursor:pointer;padding:8px}
+.scanbtn svg{width:28px;height:28px}
+.bcrow{display:flex;gap:8px}
+.bcrow input{flex:1;min-width:0;height:50px;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 12px;font-size:17px}
+.bcrow button{height:50px;border-radius:12px;border:1px solid var(--accent);background:var(--accent-soft);font-weight:600;padding:0 14px}
+.chk{flex-direction:row!important;align-items:center;gap:10px!important;font-size:15px!important;color:var(--fg)!important}
+.chk input{width:24px!important;height:24px!important}
 .fname{font-size:19px;font-weight:600;text-wrap:balance;margin:0}
 .link{align-self:flex-start;border:0;background:none;color:var(--accent);font-weight:600;padding:6px 0;font-size:15px}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px}
@@ -304,6 +315,27 @@ tr.cur td{background:var(--accent-soft)}
       <div id="stepPick" style="display:flex;flex-direction:column;gap:14px">
         <input class="search" id="q" type="search" placeholder="🔍 Пошук: курка, яйце, банан…" autocomplete="off" enterkeyhint="search" aria-label="Пошук продукту">
         <div id="foodList" style="display:flex;flex-direction:column;gap:14px"></div>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="photoFile" hidden>
+      <div class="tip good" id="busy" hidden></div>
+      <div id="stepNew" hidden style="display:flex;flex-direction:column;gap:12px">
+        <button class="link" id="newBack" type="button">‹ Назад</button>
+        <p class="fname">Новий продукт</p>
+        <div class="scanrow" id="scanRow">
+          <label class="scanbtn" for="bcFile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Сфотографувати штрихкод<input type="file" accept="image/*" capture="environment" id="bcFile" hidden></label>
+          <label class="scanbtn" for="lblFile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>Сфотографувати таблицю на етикетці<input type="file" accept="image/*" capture="environment" id="lblFile" hidden></label>
+        </div>
+        <div class="bcrow" id="bcRow"><input id="nBc" inputmode="numeric" placeholder="або впиши цифри штрихкоду" aria-label="Штрихкод"><button type="button" id="bcFind">Знайти</button></div>
+        <p class="tip good" id="scanMsg" hidden></p>
+        <div class="custom">
+          <label class="wide">Назва<input id="nName" placeholder="Напр. йогурт грецький" autocomplete="off"></label>
+          <label>Порція, г або мл<input id="nServ" type="number" min="0" step="any" inputmode="decimal" value="100"></label>
+          <label>ккал у порції<input id="nK" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label>білок у порції, г<input id="nP" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label class="chk wide"><input type="checkbox" id="nPiece"> Рахувати штуками: 1 шт = 1 порція</label>
+        </div>
+        <p class="hint" id="nCalc"></p>
+        <button class="primary" id="nSave" type="button">Зберегти продукт</button>
       </div>
       <div id="stepAmt" hidden style="display:flex;flex-direction:column;gap:14px">
         <button class="link" id="back" type="button">‹ Інший продукт</button>
@@ -434,6 +466,18 @@ const FOODS = [
   {g:"Солодке та інше", id:"custom", n:"Інше: ввести ккал і білок на 100 г самому", k:0, p:0}
 ];
 const FOOD = Object.fromEntries(FOODS.map(f => [f.id, f]));
+/* own products (added by photo / barcode / by hand), stored in config/foods */
+let MY = [];
+function applyMy(list) {
+  MY = Array.isArray(list) ? list.filter(f => f && f.id) : [];
+  for (let i = FOODS.length - 1; i >= 0; i--) if (FOODS[i].my) FOODS.splice(i, 1);
+  MY.slice().reverse().forEach(f => { const x = Object.assign({}, f, {g: "Мої продукти", my: 1}); FOODS.unshift(x); FOOD[x.id] = x; });
+}
+try { applyMy(JSON.parse(localStorage.getItem("food-my") || "[]")); } catch (e) {}
+function saveMy() {
+  try { localStorage.setItem("food-my", JSON.stringify(MY)); } catch (e) {}
+  if (db) db.doc("config/foods").set({items: MY}).catch(() => setStatus("Не вдалося зберегти продукт", true));
+}
 
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2, "0");
@@ -789,6 +833,148 @@ function renderAdvice() {
   $("adviceList").innerHTML = out.slice(0, 3).map(x => `<li>${x}</li>`).join("");
 }
 
+/* ---------- new product: barcode (Open Food Facts) or label photo (text recognition) ---------- */
+function openNew() {
+  $("stepPick").hidden = true; $("stepAmt").hidden = true; $("stepNew").hidden = false;
+  const inApp = !!window.APPDB;
+  $("scanRow").hidden = !inApp; $("bcRow").hidden = !inApp;
+  ["nName", "nK", "nP", "nBc"].forEach(id => $(id).value = "");
+  $("nName").value = $("q").value.trim();
+  $("nServ").value = 100; $("nPiece").checked = false;
+  scanMsg(inApp ? "" : "Впиши цифри з етикетки. Сканування штрихкоду і фото етикетки працюють у застосунку «Калорії» на телефоні.");
+  updNew(); $("shBody").scrollTop = 0;
+}
+function scanMsg(t, bad) { const m = $("scanMsg"); m.hidden = !t; m.textContent = t; m.className = "tip " + (bad ? "bad" : "good"); }
+function updNew() {
+  const sv = +$("nServ").value || 0, k = +$("nK").value || 0, p = +$("nP").value || 0;
+  $("nCalc").textContent = sv > 0 && k > 0 ? `На 100 г: ${fmt(k / sv * 100)} ккал, ${numTxt(Math.round(p / sv * 1000) / 10)} г білка.` : "";
+}
+["nServ", "nK", "nP"].forEach(id => $(id).addEventListener("input", updNew));
+function saveNew() {
+  const name = $("nName").value.replace(/\s+/g, " ").trim(), sv = +$("nServ").value || 0, k = +$("nK").value, p = +$("nP").value || 0;
+  if (!name) { $("nName").focus(); return; }
+  if (!(sv > 0)) { $("nServ").focus(); return; }
+  if (!(k >= 0) || $("nK").value === "") { $("nK").focus(); return; }
+  const f = {id: "my_" + Math.random().toString(36).slice(2, 9), n: name, k: Math.round(k / sv * 1000) / 10, p: Math.round(p / sv * 1000) / 10};
+  if ($("nPiece").checked) f.piece = sv;
+  const bc = $("nBc").value.replace(/\D/g, ""); if (bc) f.bc = bc;
+  MY.push(f); applyMy(MY); saveMy();
+  $("stepNew").hidden = true; pickFood(f.id);
+  $("tip").hidden = false; $("tip").className = "tip good"; $("tip").innerHTML = `<b>Збережено в «Мої продукти»</b>${fmt(f.k)} ккал і ${numTxt(f.p)} г білка на 100 г. Тепер вибери, скільки з'їв, і натисни «Додати».`;
+}
+async function findBarcode(code, auto) {
+  if (!code) { $("nBc").focus(); return; }
+  $("nBc").value = code;
+  const mine = MY.find(f => f.bc === code);
+  if (mine) { scanMsg("Цей продукт уже є в «Моїх продуктах»."); $("stepNew").hidden = true; return pickFood(mine.id); }
+  scanMsg("Шукаю продукт за штрихкодом…");
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_es,generic_name,brands,nutriments,serving_quantity`);
+    const j = await r.json();
+    const pr = j && j.status === 1 ? j.product : null, n = pr && pr.nutriments || {};
+    let k = n["energy-kcal_100g"]; if (k == null && n.energy_100g != null) k = n.energy_100g / 4.184;
+    if (!pr || k == null) { scanMsg("У базі цього продукту немає або в нього немає калорій. Сфотографуй таблицю на етикетці.", true); return false; }
+    const name = [pr.product_name || pr.product_name_es || pr.generic_name, pr.brands && pr.brands.split(",")[0]].filter(Boolean).join(", ");
+    const sv = +pr.serving_quantity > 0 ? +pr.serving_quantity : 100;
+    $("nName").value = name || $("nName").value;
+    $("nServ").value = Math.round(sv * 10) / 10;
+    $("nK").value = Math.round(k * sv / 100);
+    $("nP").value = Math.round((+n.proteins_100g || 0) * sv / 10) / 10;
+    $("nPiece").checked = sv !== 100;
+    updNew();
+    if (auto && $("nName").value) { saveNew(); return true; }
+    scanMsg("Знайшов у базі Open Food Facts. Звір цифри з етикеткою і натисни «Зберегти продукт».");
+    return true;
+  } catch (e) { scanMsg("Немає інтернету або база не відповідає. Спробуй пізніше або сфотографуй етикетку.", true); return false; }
+}
+function loadScript(src) { return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
+async function decodeBarcode(file) {
+  try {
+    if ("BarcodeDetector" in window) {
+      const det = new BarcodeDetector({formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"]});
+      const r = await det.detect(await createImageBitmap(file));
+      if (r[0]) return r[0].rawValue;
+    }
+  } catch (e) {}
+  try {
+    if (!window.ZXing) await loadScript("https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js");
+    const url = URL.createObjectURL(file);
+    const res = await new ZXing.BrowserMultiFormatReader().decodeFromImageUrl(url);
+    URL.revokeObjectURL(url);
+    return res && res.getText();
+  } catch (e) { return null; }
+}
+$("bcFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  scanMsg("Читаю штрихкод…");
+  const code = await decodeBarcode(f);
+  if (!code) { scanMsg("Не вдалося прочитати штрихкод. Сфотографуй ближче і рівно, або впиши цифри вручну.", true); return; }
+  findBarcode(code);
+});
+function parseLabel(text) {
+  const s = text.toLowerCase().replace(/(\d),(\d)/g, "$1.$2").replace(/[oо](?=\d)|(?<=\d)[oо]/g, "0");
+  const n = re => { const m = s.match(re); return m ? parseFloat(m[1]) : null; };
+  const serv = n(/(?:porci[oó]n|serving|tama[nñ]o)[^\d\n]{0,40}(\d+(?:\.\d+)?)\s*(?:g|ml)\b/) ;
+  const kcal = n(/(\d+(?:\.\d+)?)\s*k\s?cal/) ?? n(/calor[ií]as?[^\d\n]{0,20}(\d+(?:\.\d+)?)/) ?? n(/calories[^\d\n]{0,20}(\d+(?:\.\d+)?)/);
+  const prot = n(/prote[ií]n[ae]?s?[^\d\n]{0,20}(\d+(?:\.\d+)?)\s*g/) ?? n(/prote[ií]n[ae]?s?[^\d\n]{0,20}(\d+(?:\.\d+)?)/);
+  const per100 = /(?:por|per|en)\s*100\s*(?:g|ml)/.test(s);
+  return {serv: per100 ? 100 : serv, kcal, prot};
+}
+function guessName(text) {
+  const lines = text.split(/\n/).map(l => l.replace(/[^\p{L}\d %.,'-]/gu, "").trim()).filter(l => /\p{L}{3}/u.test(l) && !/(informaci|nutri|porci|calor|energ|grasa|prote|carbo|az[uú]car|sodio|serving|ingredient)/i.test(l));
+  return lines[0] ? lines[0].slice(0, 40) : "";
+}
+async function ocr(f) {
+  if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
+  const r = await Tesseract.recognize(f, "spa+eng");
+  return r.data.text || "";
+}
+$("photoFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const busy = t => { $("busy").hidden = !t; $("busy").textContent = t || ""; };
+  $("stepPick").hidden = true;
+  busy("Шукаю штрихкод на фото…");
+  const code = await decodeBarcode(f);
+  if (code) {
+    openNew(); $("stepNew").hidden = true; busy("Знайшов штрихкод, шукаю продукт у базі…");
+    const ok = await findBarcode(code, true);
+    busy("");
+    if (ok && !$("stepAmt").hidden) return;
+    $("stepNew").hidden = false;
+    if (ok) return;
+  } else openNew();
+  $("stepNew").hidden = true;
+  busy("Читаю таблицю калорій на етикетці… Перший раз це може зайняти до хвилини.");
+  try {
+    const text = await ocr(f);
+    const v = parseLabel(text);
+    if (!$("nName").value) $("nName").value = guessName(text) || `Новий продукт ${pad(new Date().getDate())}.${pad(new Date().getMonth() + 1)}`;
+    if (v.serv) $("nServ").value = v.serv;
+    if (v.kcal != null) $("nK").value = v.kcal;
+    if (v.prot != null) $("nP").value = v.prot;
+    $("nPiece").checked = !!(v.serv && v.serv !== 100);
+    updNew();
+    busy(""); $("stepNew").hidden = false;
+    scanMsg(v.kcal != null ? "Розпізнав етикетку. Звір цифри і назву, потім натисни «Зберегти продукт»." : "Цифри не розпізнались. Сфотографуй таблицю калорій ближче і при гарному світлі, або впиши цифри вручну.", v.kcal == null);
+  } catch (err) { busy(""); $("stepNew").hidden = false; scanMsg("Для розпізнавання потрібен інтернет. Спробуй ще раз або впиши цифри вручну.", true); }
+});
+$("lblFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  scanMsg("Розпізнаю етикетку… Перший раз це може зайняти до хвилини.");
+  try {
+    const text = await ocr(f);
+    const v = parseLabel(text);
+    if (!$("nName").value) $("nName").value = guessName(text);
+    if (v.serv) $("nServ").value = v.serv;
+    if (v.kcal != null) $("nK").value = v.kcal;
+    if (v.prot != null) $("nP").value = v.prot;
+    $("nPiece").checked = !!(v.serv && v.serv !== 100);
+    updNew();
+    const got = [v.serv && "порцію", v.kcal != null && "калорії", v.prot != null && "білок"].filter(Boolean);
+    scanMsg(got.length ? `Розпізнав ${got.join(", ")}. Обов'язково звір цифри з етикеткою, впиши назву і натисни «Зберегти продукт».` : "Цифри не розпізнались. Сфотографуй таблицю ближче, при гарному світлі, або впиши вручну.", !got.length);
+  } catch (err) { scanMsg("Для розпізнавання потрібен інтернет. Спробуй ще раз або впиши вручну.", true); }
+});
+
 /* ---------- add / edit sheet ---------- */
 const sh = {mode: "add", meal: "lunch", food: null, unit: "g", entry: null, cat: ""};
 function mealByTime() {
@@ -816,7 +1002,7 @@ function renderChips() {
 function foodBtn(f) {
   return `<button class="food" type="button" data-food="${f.id}"><span>${esc(f.n)}</span><small>${f.id === "custom" ? "" : `${fmt(f.k)} ккал<br>${numTxt(f.p)} г білка<br>на 100 г`}</small></button>`;
 }
-const CATS = [...new Set(FOODS.map(f => f.g))];
+const cats = () => [...new Set(FOODS.map(f => f.g))];
 function lastMealEntries(meal) {
   const keys = Object.keys(days).filter(k => k < current).sort().reverse();
   for (const k of keys) { const l = (days[k].entries || []).filter(e => e.meal === meal); if (l.length) return {date: k, list: l}; }
@@ -832,10 +1018,11 @@ function renderFoodList() {
     const words = q.split(/\s+/);
     const hit = FOODS.filter(f => words.every(w => (f.n + " " + f.g).toLowerCase().includes(w)));
     html = hit.length ? `<div class="flist">${hit.map(foodBtn).join("")}</div>`
-      : `<p class="hint">Такого продукту в списку немає. Можна внести його самому:</p><div class="flist">${foodBtn(FOOD.custom)}</div>`;
+      : `<p class="hint">Такого продукту в списку немає.</p><button class="newprod" type="button" id="newProd"><span class="plus2">＋</span><span><b>Додати новий продукт</b><small>фото, штрихкод або вручну</small></span></button>`;
   } else if (sh.cat) {
     html = `<button class="link" type="button" data-cat="">‹ Усі категорії</button><div class="glabel">${esc(sh.cat)}</div><div class="flist">${FOODS.filter(f => f.g === sh.cat && f.id !== "custom").map(foodBtn).join("")}</div>`;
   } else {
+    html += `<button class="newprod" type="button" id="newProd"><span class="plus2">＋</span><span><b>Новий продукт</b><small>${window.APPDB ? "сфотографуй упаковку: штрихкод або таблицю калорій" : "впиши дані з етикетки"}</small></span></button>`;
     const last = lastMealEntries(sh.meal);
     if (last) {
       const t = dayTotals({entries: last.list});
@@ -845,7 +1032,7 @@ function renderFoodList() {
     const {cnt} = usage();
     const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 12).map(id => FOOD[id]);
     if (top.length) html += `<div class="glabel">Твої часті продукти</div><div class="tiles">${top.map(tile).join("")}</div>`;
-    html += `<div class="glabel">Усі продукти за категоріями</div><div class="tiles cats">${CATS.map(c => `<button class="tile cat" type="button" data-cat="${esc(c)}"><b>${esc(c)}</b><small>${FOODS.filter(f => f.g === c && f.id !== "custom").length} продуктів</small></button>`).join("")}<button class="tile cat" type="button" data-food="custom"><b>Свій продукт</b><small>ввести з етикетки</small></button></div>`;
+    html += `<div class="glabel">Усі продукти за категоріями</div><div class="tiles cats">${cats().map(c => `<button class="tile cat" type="button" data-cat="${esc(c)}"><b>${esc(c)}</b><small>${FOODS.filter(f => f.g === c && f.id !== "custom").length} продуктів</small></button>`).join("")}<button class="tile cat" type="button" data-food="custom"><b>Свій продукт</b><small>ввести з етикетки</small></button></div>`;
   }
   $("foodList").innerHTML = html;
 }
@@ -856,10 +1043,10 @@ function repeatMeal(date) {
   scheduleSave(current); closeSheet(); render();
 }
 function openSheet(meal) {
-  sh.mode = "add"; sh.entry = null; sh.meal = meal || mealByTime(); sh.food = null; sh.cat = "";
+  sh.mode = "add"; sh.entry = null; sh.meal = meal || mealByTime(); sh.food = null; sh.cat = ""; $("busy").hidden = true;
   $("shTitle").textContent = "Додати їжу";
   $("q").value = "";
-  $("stepPick").hidden = false; $("stepAmt").hidden = true;
+  $("stepPick").hidden = false; $("stepAmt").hidden = true; $("stepNew").hidden = true;
   renderChips(); renderFoodList();
   $("sheet").hidden = false; document.body.style.overflow = "hidden";
   $("shBody").scrollTop = 0;
@@ -887,7 +1074,7 @@ function pickFood(id) {
 }
 function showAmount(amount) {
   const f = FOOD[sh.food] || {n: sh.food};
-  $("stepPick").hidden = true; $("stepAmt").hidden = false;
+  $("stepPick").hidden = true; $("stepAmt").hidden = false; $("stepNew").hidden = true;
   $("back").hidden = sh.mode === "edit";
   $("del").hidden = sh.mode !== "edit";
   $("fName").textContent = sh.food === "custom" ? (sh.mode === "edit" ? "Свій продукт" : "Свій продукт: впиши дані з етикетки") : f.n;
@@ -958,6 +1145,10 @@ document.addEventListener("click", ev => {
     case "prev": { const d = parseIso(current); d.setDate(d.getDate() - 1); return go(iso(d)); }
     case "next": { const d = parseIso(current); d.setDate(d.getDate() + 1); return go(iso(d)); }
     case "back": $("stepPick").hidden = false; $("stepAmt").hidden = true; return;
+    case "newProd": if (window.APPDB) { $("photoFile").click(); return; } return openNew();
+    case "newBack": $("stepNew").hidden = true; $("stepPick").hidden = false; return;
+    case "bcFind": return findBarcode($("nBc").value.replace(/\D/g, ""));
+    case "nSave": return saveNew();
     case "minus": return step(-1);
     case "plus": return step(1);
     case "save": return saveSheet();
@@ -993,6 +1184,10 @@ setStatus("Збережено на цьому телефоні");
   if (!db) { setStatus("Зберігається лише на цьому телефоні"); return; }
   mode = "db";
   setStatus("Синхронізовано ✓");
+  db.doc("config/foods").onSnapshot(snap => {
+    if (snap.exists && snap.data() && Array.isArray(snap.data().items)) { applyMy(snap.data().items); try { localStorage.setItem("food-my", JSON.stringify(MY)); } catch (e) {} render(); }
+    else if (MY.length) saveMy();
+  }, () => {});
   db.collection("days").onSnapshot(snap => {
     snap.docs.forEach(doc => { if (!dirty.has(doc.id)) days[doc.id] = JSON.parse(JSON.stringify(doc.data())); });
     saveLocal();
@@ -1010,7 +1205,7 @@ setStatus("Збережено на цьому телефоні");
     ? "Записи зберігаються на цьому телефоні. Раз на тиждень зберігай копію у файл. Надішли файл Claude, якщо хочеш, щоб він проаналізував твої результати."
     : "Ця кнопка копіює всі записи, щоб перенести їх у застосунок на телефоні: відкрий застосунок, вкладка з записами, встав і натисни «Перенести записи».";
   const msg = t => { el("bkMsg").textContent = t; };
-  const pack = () => JSON.stringify({app: APP, v: 1, at: new Date().toISOString(), docs: (() => { const o = {}; Object.keys(days).forEach(k => { const d = days[k]; if (d && ((d.entries||[]).length || d.weight || d.creatine || d.meas)) o["days/" + k] = d; }); return o; })()});
+  const pack = () => JSON.stringify({app: APP, v: 1, at: new Date().toISOString(), docs: (() => { const o = {}; Object.keys(days).forEach(k => { const d = days[k]; if (d && ((d.entries||[]).length || d.weight || d.creatine || d.meas)) o["days/" + k] = d; }); if (MY.length) o["config/foods"] = {items: MY}; return o; })()});
   const fname = () => `${APP === "food" ? "kalorii" : "trenuvannia"}-${new Date().toISOString().slice(0,10)}.json`;
   el("bkCopy").addEventListener("click", () => {
     const t = pack();
