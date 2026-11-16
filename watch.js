@@ -177,10 +177,7 @@
       const st0 = S[t] || 0, eaten = eatenOn(today), burned = T[t];
       const aggToday = (steps.find(v => ymd(new Date(v.startDate)) === t) || {}).value;
       const diagText = stepDiag(src.raw || [], Math.round(aggToday || 0));
-      let html = `<h1>Годинник</h1><details class="card" open><summary><b>Перевірка кроків (тимчасово)</b></summary>
-        <p>Натисніть кнопку і вставте скопійоване в чат для Claude. Так я побачу, як Samsung передає кроки, і виправлю підрахунок.</p>
-        <button class="btn" id="cpDiag" type="button">Скопіювати для Claude</button><p id="dMsg" role="status"></p>
-        <textarea readonly id="diagTxt" style="min-height:70px">${esc(diagText)}</textarea></details>
+      let html = `<h1>Годинник</h1>
         <section class="card"><h2>Сьогодні</h2><div class="stats">
         <div class="stat wide"><span>Кроки</span><b>${fmt(st0)} <span>з 15 000</span></b><div class="bar"><i style="width:${Math.min(100, st0 / 150)}%"></i></div></div>
         <div class="stat"><span>Активні ккал</span><b>${A[t] != null ? fmt(A[t]) : "–"}</b></div>
@@ -217,7 +214,10 @@
         <p>Годинник передає дані в Samsung Health, а той у Health Connect. Samsung Health робить це не одразу, а раз на якийсь час. Щоб підтягнути свіжі кроки, відкрийте Samsung Health на кілька секунд, поверніться сюди і натисніть «Оновити».</p>
         ${src.last ? `<p>Останні кроки в Health Connect: о ${src.last.toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"})}.</p>` : ""}
         ${src.list.length ? `<p>Кроки сьогодні за пристроями: ${src.list.map(x => esc(srcName(x.name)) + " " + fmt(x.sum)).join(", ")}.</p>` : ""}</section>` + transferCard();
-      body.innerHTML = html;
+      body.innerHTML = html + `<details class="card"><summary><b>Перевірка кроків </b></summary>
+        <p>Натисніть кнопку і вставте скопійоване в чат для Claude. Так я побачу, як Samsung передає кроки, і виправлю підрахунок.</p>
+        <button class="btn" id="cpDiag" type="button">Скопіювати для Claude</button><p id="dMsg" role="status"></p>
+        <textarea readonly id="diagTxt" style="min-height:70px">${esc(diagText)}</textarea></details>`;
       $("cpDiag").onclick = async () => {
         try { await navigator.clipboard.writeText(diagText); $("dMsg").className = "ok"; $("dMsg").textContent = "Скопійовано. Вставте в чат."; }
         catch (e) { $("diagTxt").select(); $("dMsg").className = "err"; $("dMsg").textContent = "Утримуйте палець на тексті нижче, «Виділити все», «Копіювати»."; }
@@ -255,16 +255,21 @@
   }
   function srcName(p) { return p === "watch" ? "годинник" : p === "phone" ? "телефон" : p === "other" ? "інше" : p; }
   function mergeSteps(samples) {
-    const seen = new Set(), W = [], P = [], per = {};
+    const seen = new Set(), W = [], P = [], per = {}, G = {};
     let last = null;
     for (const x of samples) {
       const s0 = +new Date(x.startDate), e0 = +new Date(x.endDate), v = +x.value || 0;
       const d = devOf(x), key = d + s0 + "|" + e0 + "|" + v;
       if (seen.has(key) || v <= 0) continue; seen.add(key);
       per[d] = (per[d] || 0) + v;
-      if (!last || e0 > last) last = e0;
-      (d === "watch" ? W : P).push([s0, Math.max(e0, s0 + 1), v]);
+      if (e0 <= Date.now() && (!last || e0 > last)) last = e0;
+      (G[d] || (G[d] = [])).push([s0, Math.max(e0, s0 + 1), v]);
     }
+    // base: watch records, or Samsung Health's own untyped records (its merged watch+phone count, often one block per day),
+    // whichever holds more; everything else only fills time the base does not cover
+    const sumOf = a => (a || []).reduce((t, x) => t + x[2], 0);
+    const baseKey = sumOf(G.watch) >= sumOf(G.other) ? (G.watch ? "watch" : "other") : "other";
+    for (const k in G) (k === baseKey ? W : P).push(...G[k]);
     W.sort((a, b) => a[0] - b[0]);
     const U = []; // union of watch time
     for (const [s0, e0] of W) { if (U.length && s0 <= U[U.length - 1][1]) U[U.length - 1][1] = Math.max(U[U.length - 1][1], e0); else U.push([s0, e0]); }
