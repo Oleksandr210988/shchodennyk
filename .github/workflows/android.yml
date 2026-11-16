@@ -35,7 +35,7 @@ jobs:
           KEYSTORE_FILE: ${{ env.SIGNED && format('{0}/release.jks', runner.temp) || '' }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: shchodennyk
-        run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease && cp app/build/outputs/apk/release/app-release.apk $GITHUB_WORKSPACE/shchodennyk.apk
+        run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease --stacktrace && cp app/build/outputs/apk/release/app-release.apk $GITHUB_WORKSPACE/shchodennyk.apk
       - uses: actions/upload-artifact@v4
         with:
           name: shchodennyk-apk
