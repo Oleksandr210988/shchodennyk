@@ -154,7 +154,7 @@
       const t = ymd(today);
       const hrToday = hr.find(s => ymd(new Date(s.startDate)) === t);
       const src = await stepSources(today, now);
-      if (src.best > (S[t] || 0)) S[t] = src.best;
+      if (src.watch > 0) S[t] = src.watch;
       let sleepMin = null;
       try {
         const from = new Date(today); from.setHours(-12);
@@ -210,7 +210,7 @@
       html += `</section><section class="card"><button class="btn" id="refresh" type="button">Оновити</button><button class="btn sec" id="hcSet" type="button">Налаштування Health Connect</button>
         <p>Годинник передає дані в Samsung Health, а той у Health Connect. Samsung Health робить це не одразу, а раз на якийсь час. Щоб підтягнути свіжі кроки, відкрийте Samsung Health на кілька секунд, поверніться сюди і натисніть «Оновити».</p>
         ${src.last ? `<p>Останні кроки в Health Connect: о ${src.last.toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"})}.</p>` : ""}
-        ${src.list.length ? `<p>Джерела кроків сьогодні: ${src.list.map(x => esc(srcName(x.name)) + " " + fmt(x.sum)).join(", ")}.</p>` : ""}</section>` + transferCard();
+        ${src.list.length ? `<p>Кроки сьогодні за пристроями: ${src.list.map(x => esc(srcName(x.name)) + " " + fmt(x.sum)).join(", ")}.</p>` : ""}</section>` + transferCard();
       body.innerHTML = html;
       $("refresh").onclick = () => { busy = false; renderWatch(); };
       $("hcSet").onclick = () => Health.openHealthConnectSettings().catch(() => {});
@@ -235,20 +235,21 @@
     const age = new Date().getFullYear() - 1988 - (new Date() < new Date(new Date().getFullYear(), 9, 26) ? 1 : 0);
     return 10 * w + 6.25 * 176 - 5 * age + 5;
   }
-  /* steps per source from raw records: shows sync lag and lets us use the fullest source if Health Connect's merge picked a smaller one */
-  function srcName(p) { return /shealth|samsung/i.test(p) ? "Samsung Health" : /fit/i.test(p) ? "Google Fit" : p; }
+  /* steps by device from raw records. The watch face shows only the watch's own steps, while Samsung Health adds the phone's.
+     So when watch records exist we show the watch total, which matches the dial. */
+  function srcName(p) { return p === "watch" ? "годинник" : p === "phone" ? "телефон" : /shealth|samsung/i.test(p) ? "Samsung Health" : p; }
   async function stepSources(from, to) {
-    const res = {best: 0, last: null, list: []};
+    const res = {watch: 0, last: null, list: []};
     try {
       const r = await Health.readSamples({dataType: "steps", startDate: from.toISOString(), endDate: to.toISOString(), limit: 5000});
       const m = {};
       for (const x of r.samples || []) {
-        const k = x.sourceId || x.sourceName || "?";
+        const k = x.deviceType || x.sourceName || x.sourceId || "?";
         m[k] = (m[k] || 0) + (x.value || 0);
         const e = new Date(x.endDate); if (!res.last || e > res.last) res.last = e;
       }
-      res.list = Object.entries(m).map(([name, sum]) => ({name, sum})).sort((a, b) => b.sum - a.sum);
-      res.best = res.list.length ? Math.round(res.list[0].sum) : 0;
+      res.list = Object.entries(m).map(([name, sum]) => ({name, sum: Math.round(sum)})).sort((a, b) => b.sum - a.sum);
+      res.watch = Math.round(m.watch || 0);
     } catch (e) {}
     return res;
   }
@@ -263,7 +264,7 @@
       const [s, a, tot] = await Promise.all([agg("steps", today, now, "sum"), agg("calories", today, now, "sum"), agg("totalCalories", today, now, "sum")]);
       const pick = arr => { const x = arr.find(v => ymd(new Date(v.startDate)) === t); return x ? Math.round(x.value) : null; };
       const src = await stepSources(today, now);
-      const steps = Math.max(pick(s) || 0, src.best) || null;
+      const steps = src.watch > 0 ? src.watch : pick(s);
       let total = pick(tot); const active = pick(a);
       if (total == null && active != null) total = Math.round(bmrPerDay() * (now - today) / 864e5 + active);
       const data = {date: t, steps, active, total, at: now.toISOString()};
