@@ -153,7 +153,8 @@
       }
       const t = ymd(today);
       const hrToday = hr.find(s => ymd(new Date(s.startDate)) === t);
-      const src = await stepSources(today, now);
+      const SD = await stepsByDay(7, now); const src = SD._today;
+      for (const k in SD) if (k !== "_today") S[k] = SD[k];
       let sleepMin = null;
       try {
         const from = new Date(today); from.setHours(-12);
@@ -234,23 +235,56 @@
     const age = new Date().getFullYear() - 1988 - (new Date() < new Date(new Date().getFullYear(), 9, 26) ? 1 : 0);
     return 10 * w + 6.25 * 176 - 5 * age + 5;
   }
-  /* steps by device from raw records, shown for comparison. The main number is Health Connect's merged total,
-     the same one Samsung Health shows on the phone (watch + phone without double counting). */
-  function srcName(p) { return p === "watch" ? "годинник" : p === "phone" ? "телефон" : /shealth|samsung/i.test(p) ? "Samsung Health" : p; }
+  /* Steps like Samsung Health counts them: the watch is the base, and phone steps are added only for the time the watch
+     recorded nothing (watch off the wrist, charging). Health Connect's own merge drops part of the watch steps. */
+  function devOf(x) {
+    const n = (x.sourceName || "") + " " + (x.sourceId || "");
+    if (x.deviceType === "watch" || /SM-R\d|watch/i.test(n)) return "watch";
+    if (x.deviceType === "phone" || /SM-[SGAFNM]\d/i.test(n)) return "phone";
+    return x.deviceType || "other";
+  }
+  function srcName(p) { return p === "watch" ? "годинник" : p === "phone" ? "телефон" : p === "other" ? "інше" : p; }
+  function mergeSteps(samples) {
+    const seen = new Set(), W = [], P = [], per = {};
+    let last = null;
+    for (const x of samples) {
+      const s0 = +new Date(x.startDate), e0 = +new Date(x.endDate), v = +x.value || 0;
+      const d = devOf(x), key = d + s0 + "|" + e0 + "|" + v;
+      if (seen.has(key) || v <= 0) continue; seen.add(key);
+      per[d] = (per[d] || 0) + v;
+      if (!last || e0 > last) last = e0;
+      (d === "watch" ? W : P).push([s0, Math.max(e0, s0 + 1), v]);
+    }
+    W.sort((a, b) => a[0] - b[0]);
+    const U = []; // union of watch time
+    for (const [s0, e0] of W) { if (U.length && s0 <= U[U.length - 1][1]) U[U.length - 1][1] = Math.max(U[U.length - 1][1], e0); else U.push([s0, e0]); }
+    const covered = (s0, e0) => { let c = 0; for (const [a, b] of U) { if (b <= s0) continue; if (a >= e0) break; c += Math.min(b, e0) - Math.max(a, s0); } return c; };
+    let total = W.reduce((t, w) => t + w[2], 0);
+    for (const [s0, e0, v] of P) total += v * Math.max(0, 1 - covered(s0, e0) / (e0 - s0));
+    return {total: Math.round(total), hasWatch: W.length > 0, per, last: last ? new Date(last) : null};
+  }
   async function stepSources(from, to) {
-    const res = {watch: 0, last: null, list: []};
+    const res = {merged: null, last: null, list: []};
     try {
-      const r = await Health.readSamples({dataType: "steps", startDate: from.toISOString(), endDate: to.toISOString(), limit: 5000});
-      const m = {};
-      for (const x of r.samples || []) {
-        const k = x.deviceType || x.sourceName || x.sourceId || "?";
-        m[k] = (m[k] || 0) + (x.value || 0);
-        const e = new Date(x.endDate); if (!res.last || e > res.last) res.last = e;
-      }
-      res.list = Object.entries(m).map(([name, sum]) => ({name, sum: Math.round(sum)})).sort((a, b) => b.sum - a.sum);
-      res.watch = Math.round(m.watch || 0);
+      const r = await Health.readSamples({dataType: "steps", startDate: from.toISOString(), endDate: to.toISOString(), limit: 5000, ascending: true});
+      const m = mergeSteps(r.samples || []);
+      res.last = m.last;
+      res.list = Object.entries(m.per).map(([name, sum]) => ({name, sum: Math.round(sum)})).sort((a, b) => b.sum - a.sum);
+      if (m.hasWatch) res.merged = m.total;
     } catch (e) {}
     return res;
+  }
+  async function stepsByDay(days, now) {
+    // merged steps for each of the last `days` days (one query per day keeps each under the record limit)
+    const out = {};
+    await Promise.all(Array.from({length: days}, async (_, i) => {
+      const d0 = dayStart(now); d0.setDate(d0.getDate() - i);
+      const d1 = new Date(d0); d1.setDate(d1.getDate() + 1);
+      const r = await stepSources(d0, i === 0 ? now : d1);
+      if (r.merged != null) out[ymd(d0)] = r.merged;
+      if (i === 0) out._today = r;
+    }));
+    return out;
   }
 
   /* ---------- automatic sync: today's steps and burn go to the calorie page without any taps ---------- */
@@ -263,7 +297,7 @@
       const [s, a, tot] = await Promise.all([agg("steps", today, now, "sum"), agg("calories", today, now, "sum"), agg("totalCalories", today, now, "sum")]);
       const pick = arr => { const x = arr.find(v => ymd(new Date(v.startDate)) === t); return x ? Math.round(x.value) : null; };
       const src = await stepSources(today, now);
-      const steps = pick(s);
+      const steps = src.merged != null ? src.merged : pick(s);
       let total = pick(tot); const active = pick(a);
       if (total == null && active != null) total = Math.round(bmrPerDay() * (now - today) / 864e5 + active);
       const data = {date: t, steps, active, total, at: now.toISOString()};
