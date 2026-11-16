@@ -154,7 +154,6 @@
       const t = ymd(today);
       const hrToday = hr.find(s => ymd(new Date(s.startDate)) === t);
       const src = await stepSources(today, now);
-      if (src.watch > 0) S[t] = src.watch;
       let sleepMin = null;
       try {
         const from = new Date(today); from.setHours(-12);
@@ -235,8 +234,8 @@
     const age = new Date().getFullYear() - 1988 - (new Date() < new Date(new Date().getFullYear(), 9, 26) ? 1 : 0);
     return 10 * w + 6.25 * 176 - 5 * age + 5;
   }
-  /* steps by device from raw records. The watch face shows only the watch's own steps, while Samsung Health adds the phone's.
-     So when watch records exist we show the watch total, which matches the dial. */
+  /* steps by device from raw records, shown for comparison. The main number is Health Connect's merged total,
+     the same one Samsung Health shows on the phone (watch + phone without double counting). */
   function srcName(p) { return p === "watch" ? "годинник" : p === "phone" ? "телефон" : /shealth|samsung/i.test(p) ? "Samsung Health" : p; }
   async function stepSources(from, to) {
     const res = {watch: 0, last: null, list: []};
@@ -264,7 +263,7 @@
       const [s, a, tot] = await Promise.all([agg("steps", today, now, "sum"), agg("calories", today, now, "sum"), agg("totalCalories", today, now, "sum")]);
       const pick = arr => { const x = arr.find(v => ymd(new Date(v.startDate)) === t); return x ? Math.round(x.value) : null; };
       const src = await stepSources(today, now);
-      const steps = src.watch > 0 ? src.watch : pick(s);
+      const steps = pick(s);
       let total = pick(tot); const active = pick(a);
       if (total == null && active != null) total = Math.round(bmrPerDay() * (now - today) / 864e5 + active);
       const data = {date: t, steps, active, total, at: now.toISOString()};
