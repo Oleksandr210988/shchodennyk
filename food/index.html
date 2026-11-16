@@ -219,6 +219,8 @@ tr.cur td{background:var(--accent-soft)}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px}
 .seg button{height:46px;border:0;border-radius:10px;background:none;font-size:16px;font-weight:600;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.pcrow{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
+.pcrow input{width:96px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);text-align:center;font-size:18px;font-family:var(--font-num)}
 .amt{display:grid;grid-template-columns:64px 1fr 64px;gap:8px}
 .amt button{height:64px;border-radius:14px;border:1px solid var(--line);background:var(--card);font-size:30px;line-height:1}
 .amt input{width:100%;min-width:0;height:64px;border-radius:14px;border:2px solid var(--accent);background:var(--card);text-align:center;font-size:30px;font-family:var(--font-num);font-weight:600}
@@ -353,6 +355,7 @@ tr.cur td{background:var(--accent-soft)}
           <p class="hint" style="grid-column:1/-1">Цифри з етикетки «на 100 г», а нижче скільки грамів з'їв.</p>
         </div>
         <div class="seg" id="units" role="group" aria-label="Одиниця"></div>
+        <label class="pcrow" id="pcRow" hidden>Вага 1 штуки:<input id="pcW" type="number" min="0" step="any" inputmode="decimal" aria-label="Вага однієї штуки, г"> г</label>
         <div class="amt">
           <button type="button" id="minus" aria-label="Менше">−</button>
           <input id="amt" type="number" min="0" step="any" inputmode="decimal" aria-label="Кількість">
@@ -480,9 +483,16 @@ function applyMy(list) {
   MY.slice().reverse().forEach(f => { const x = Object.assign({}, f, {g: "Мої продукти", my: 1}); FOODS.unshift(x); FOOD[x.id] = x; });
 }
 try { applyMy(JSON.parse(localStorage.getItem("food-my") || "[]")); } catch (e) {}
+/* own weight of 1 piece for any product (so every product can be entered in pieces or grams) */
+let PIECES = {};
+function applyPieces(map) {
+  PIECES = map && typeof map === "object" ? map : {};
+  Object.entries(PIECES).forEach(([id, g]) => { const f = FOOD[id]; if (f && +g > 0) { if (f.piece0 === undefined) f.piece0 = f.piece || 0; f.piece = +g; } });
+}
+try { applyPieces(JSON.parse(localStorage.getItem("food-pieces") || "{}")); } catch (e) {}
 function saveMy() {
-  try { localStorage.setItem("food-my", JSON.stringify(MY)); } catch (e) {}
-  if (db) db.doc("config/foods").set({items: MY}).catch(() => setStatus("Не вдалося зберегти продукт", true));
+  try { localStorage.setItem("food-my", JSON.stringify(MY)); localStorage.setItem("food-pieces", JSON.stringify(PIECES)); } catch (e) {}
+  if (db) db.doc("config/foods").set({items: MY, pieces: PIECES}).catch(() => setStatus("Не вдалося зберегти продукт", true));
 }
 
 const $ = id => document.getElementById(id);
@@ -1088,12 +1098,24 @@ function showAmount(amount) {
   $("fName").textContent = sh.food === "custom" ? (sh.mode === "edit" ? "Свій продукт" : "Свій продукт: впиши дані з етикетки") : f.n;
   $("customBox").hidden = sh.food !== "custom";
   { const tp = tipFor(sh.food); $("tip").hidden = !tp; $("tip").className = "tip " + (TIPS[sh.food] ? "bad" : "good"); $("tip").innerHTML = tp; }
-  $("units").hidden = !f.piece;
-  $("units").innerHTML = f.piece ? `<button type="button" data-unit="pc" aria-pressed="${sh.unit === "pc"}">штуки</button><button type="button" data-unit="g" aria-pressed="${sh.unit === "g"}">грами</button>` : "";
+  $("units").hidden = sh.food === "custom";
+  $("units").innerHTML = `<button type="button" data-unit="pc" aria-pressed="${sh.unit === "pc"}">штуки</button><button type="button" data-unit="g" aria-pressed="${sh.unit === "g"}">грами</button>`;
+  showPc();
   $("amt").value = amount;
   renderQuick(); updCalc();
   $("shBody").scrollTop = 0;
 }
+function showPc() {
+  const f = FOOD[sh.food] || {};
+  $("pcRow").hidden = sh.unit !== "pc";
+  $("pcW").value = f.piece || "";
+}
+$("pcW").addEventListener("input", () => {
+  const g = parseFloat(String($("pcW").value).replace(",", ".")), f = FOOD[sh.food];
+  if (!f || !(g > 0)) return;
+  if (f.piece0 === undefined) f.piece0 = f.piece || 0;
+  f.piece = g; PIECES[sh.food] = g; saveMy(); updCalc();
+});
 function renderQuick() {
   const q = sh.unit === "pc" ? [0.5, 1, 2, 3, 4, 5] : [50, 100, 150, 200, 250, 300];
   $("quick").innerHTML = q.map(v => `<button type="button" data-q="${v}">${numTxt(v)} ${sh.unit === "pc" ? "шт" : "г"}</button>`).join("");
@@ -1116,6 +1138,7 @@ function step(dir) {
 function saveSheet() {
   const d = draftEntry();
   if (!(d.amount > 0)) { $("amt").focus(); return; }
+  if (d.unit === "pc" && !(FOOD[d.food] || {}).piece) { $("pcW").focus(); return; }
   if (sh.mode === "add") {
     const e = {id: Math.random().toString(36).slice(2, 10), meal: sh.meal, food: d.food, amount: d.amount, unit: d.unit};
     if (d.food === "custom") { e.cn = $("cName").value.trim() || "Інше"; e.ck = d.ck; e.cp = d.cp; }
@@ -1141,8 +1164,13 @@ document.addEventListener("click", ev => {
   if (b.dataset.food) return pickFood(b.dataset.food);
   if (b.dataset.unit) {
     const f = FOOD[sh.food], v = parseFloat(String($("amt").value).replace(",", ".")) || 0;
-    if (b.dataset.unit !== sh.unit && f.piece) $("amt").value = b.dataset.unit === "pc" ? Math.max(0.5, Math.round(v / f.piece * 2) / 2) : Math.round(v * f.piece);
+    if (b.dataset.unit !== sh.unit) {
+      if (f.piece) $("amt").value = b.dataset.unit === "pc" ? Math.max(0.5, Math.round(v / f.piece * 2) / 2) : Math.round(v * f.piece);
+      else if (b.dataset.unit === "pc") $("amt").value = 1;
+    }
     sh.unit = b.dataset.unit;
+    showPc();
+    if (sh.unit === "pc" && !f.piece) setTimeout(() => $("pcW").focus(), 30);
     $("units").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.unit === sh.unit));
     renderQuick(); return updCalc();
   }
@@ -1194,7 +1222,7 @@ setStatus("Збережено на цьому телефоні");
   mode = "db";
   setStatus("Синхронізовано ✓");
   db.doc("config/foods").onSnapshot(snap => {
-    if (snap.exists && snap.data() && Array.isArray(snap.data().items)) { applyMy(snap.data().items); try { localStorage.setItem("food-my", JSON.stringify(MY)); } catch (e) {} render(); }
+    if (snap.exists && snap.data() && Array.isArray(snap.data().items)) { applyMy(snap.data().items); applyPieces(snap.data().pieces || PIECES); try { localStorage.setItem("food-my", JSON.stringify(MY)); localStorage.setItem("food-pieces", JSON.stringify(PIECES)); } catch (e) {} render(); }
     else if (MY.length) saveMy();
   }, () => {});
   db.collection("days").onSnapshot(snap => {
@@ -1214,7 +1242,7 @@ setStatus("Збережено на цьому телефоні");
     ? "Записи зберігаються на цьому телефоні. Раз на тиждень зберігай копію у файл. Надішли файл Claude, якщо хочеш, щоб він проаналізував твої результати."
     : "Ця кнопка копіює всі записи, щоб перенести їх у застосунок на телефоні: відкрий застосунок, вкладка з записами, встав і натисни «Перенести записи».";
   const msg = t => { el("bkMsg").textContent = t; };
-  const pack = () => JSON.stringify({app: APP, v: 1, at: new Date().toISOString(), docs: (() => { const o = {}; Object.keys(days).forEach(k => { const d = days[k]; if (d && ((d.entries||[]).length || d.weight || d.creatine || d.meas)) o["days/" + k] = d; }); if (MY.length) o["config/foods"] = {items: MY}; return o; })()});
+  const pack = () => JSON.stringify({app: APP, v: 1, at: new Date().toISOString(), docs: (() => { const o = {}; Object.keys(days).forEach(k => { const d = days[k]; if (d && ((d.entries||[]).length || d.weight || d.creatine || d.meas)) o["days/" + k] = d; }); if (MY.length || Object.keys(PIECES).length) o["config/foods"] = {items: MY, pieces: PIECES}; return o; })()});
   const fname = () => `${APP === "food" ? "kalorii" : "trenuvannia"}-${new Date().toISOString().slice(0,10)}.json`;
   el("bkCopy").addEventListener("click", () => {
     const t = pack();
