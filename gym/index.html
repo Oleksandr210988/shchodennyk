@@ -59,16 +59,16 @@
 /* Layout: phone-first gym app. Start screen = big tiles "what are you training today"; workout screen = start/finish, exercises as an accordion with big set rows (lb × reps); exercise picker is a full-screen sheet with photos */
 :root{
   --bg:#eef0f2; --surface:#ffffff; --fg:#1b1f24; --muted:#5d6670; --line:#d6dbe0;
-  --accent:#1f5fbf; --accent-ink:#ffffff; --soft:#e3ebf7; --ok:#2e7d4f; --warn:#b3412e; --scrim:rgba(15,20,26,.5);
+  --accent:#1f5fbf; --accent-ink:#ffffff; --soft:#e3ebf7; --ok:#2e7d4f; --ok-soft:#e1f1e7; --warn:#b3412e; --warn-soft:#f9e6e2; --scrim:rgba(15,20,26,.5);
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#121518; --surface:#1b1f24; --fg:#e8ebee; --muted:#9aa4ae; --line:#2e353c;
-  --accent:#5b97ec; --accent-ink:#0d1a2c; --soft:#1d2a3c; --ok:#5fbf86; --warn:#e57d68; --scrim:rgba(0,0,0,.65); color-scheme:dark}}
+  --accent:#5b97ec; --accent-ink:#0d1a2c; --soft:#1d2a3c; --ok:#5fbf86; --ok-soft:#1b3326; --warn:#e57d68; --warn-soft:#3a2420; --scrim:rgba(0,0,0,.65); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#121518; --surface:#1b1f24; --fg:#e8ebee; --muted:#9aa4ae; --line:#2e353c;
-  --accent:#5b97ec; --accent-ink:#0d1a2c; --soft:#1d2a3c; --ok:#5fbf86; --warn:#e57d68; --scrim:rgba(0,0,0,.65); color-scheme:dark}
+  --accent:#5b97ec; --accent-ink:#0d1a2c; --soft:#1d2a3c; --ok:#5fbf86; --ok-soft:#1b3326; --warn:#e57d68; --warn-soft:#3a2420; --scrim:rgba(0,0,0,.65); color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
@@ -162,6 +162,12 @@ section.hist h2{font-family:var(--display);font-size:22px;margin:0}
 .bk textarea{width:100%;min-height:90px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:10px;font-size:13px}
 .bk .msg{font-size:14px;margin:0}
 .bk h2{font-family:var(--display);font-size:22px;margin:0}
+.advice{display:grid;gap:6px;border-radius:12px;padding:10px 12px;font-size:15px;background:var(--soft);border:1px solid var(--accent)}
+.advice span{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.advice.up{background:var(--ok-soft);border-color:var(--ok)} .advice.up span{color:var(--ok)}
+.advice.down{background:var(--warn-soft);border-color:var(--warn)} .advice.down span{color:var(--warn)}
+.advice .tool{justify-self:start}
+.adv-up{color:var(--ok)} .adv-down{color:var(--warn)} .adv-keep{color:var(--accent)}
 /* exercise picker sheet */
 .sheet{position:fixed;inset:0;z-index:20}
 .scrim{position:absolute;inset:0;background:var(--scrim)}
@@ -253,10 +259,11 @@ const DAYS = {
   3:{t:"Спина + плечі", g:["Спина","Плечі"]},
   4:{t:"Біцепс + трицепс", g:["Біцепс","Трицепс"]},
   5:{t:"Задня частина ніг + литки", g:["Задня поверхня стегна і сідниці","Литки"]},
-  6:{t:"Велосипед", g:[]}
+  6:{t:"Велосипед", g:[]},
+  7:{t:"Інше тренування", g:["Вправи"]}
 };
-const ORDER = [1,2,3,4,5];
-const GROUP_LABEL = {"Задня поверхня стегна і сідниці":"Задня частина ніг і сідниці"};
+const ORDER = [1,2,3,4,5,7];
+const GROUP_LABEL = {"Задня поверхня стегна і сідниці":"Задня частина ніг і сідниці", "Вправи":"Мої вправи"};
 const LIB = {"Груди": ["Жим штанги лежачи", "Жим штанги на похилій лаві", "Жим гантелей на лаві під кутом 30°", "Зведення рук у кросовері", "Жим штанги на лаві з негативним нахилом", "Жим у тренажері Сміта на похилій лаві", "Жим гантелей лежачи на горизонтальній лаві", "Зведення в кросовері знизу вгору", "Розведення гантелей лежачи", "Розведення гантелей на похилій лаві", "Жим у тренажері Сміта лежачи", "Жим гантелей на лаві з негативним нахилом", "Жим гантелей нейтральним хватом", "Пуловер з гантеллю лежачи"], "Трицепс": ["Жим штанги вузьким хватом лежачи", "Розгинання рук на верхньому блоці", "Французький жим зі штангою лежачи", "Розгинання гантелі з-за голови сидячи", "Розгинання рук на блоці з канатом", "Французький жим з гантелями лежачи", "Розгинання гантелі в нахилі", "Розгинання з канатом з-за голови на блоці", "Жим у тренажері Сміта вузьким хватом", "Розгинання на верхньому блоці зворотним хватом", "Розгинання на блоці з V-рукояттю", "Французький жим стоячи зі штангою", "JM-жим", "Жим гантелей вузьким хватом", "Розгинання однією рукою на нижньому блоці"], "Ноги": ["Присідання зі штангою", "Жим ногами", "Гоблет-присідання з гантеллю", "Розгинання ніг сидячи", "Присідання в тренажері Сміта", "Жим ногами вузькою постановкою стоп", "Фронтальні присідання в тренажері Сміта", "Розгинання однієї ноги сидячи", "Присідання зі штангою широкою постановкою", "Присідання з гантелями", "Фронтальні присідання зі штангою", "Присідання до лави зі штангою"], "Біцепс": ["Підйом штанги на біцепс стоячи", "Молоткові згинання з гантелями", "Згинання з гантелями на похилій лаві", "Згинання рук на нижньому блоці", "Згинання зі штангою на лаві Скотта", "Згинання гантелей стоячи з поворотом кисті", "Концентровані згинання з гантеллю", "Молоткові згинання на блоці з канатом", "Згинання гантелі на лаві Скотта", "Підйом штанги вузьким хватом", "Згинання рук на верхніх блоках кросовера", "Згинання з гантелями сидячи", "Згинання зі штангою зворотним хватом", "Згинання Зоттмана", "Згинання на лаві Скотта на блоці", "Молоткові згинання навхрест", "Підйом штанги широким хватом"], "Спина": ["Тяга верхнього блока широким хватом", "Тяга штанги в нахилі", "Тяга нижнього блока сидячи", "Тяга гантелі однією рукою", "Тяга верхнього блока вузьким хватом", "Тяга в тренажері Сміта в нахилі", "Тяга нижнього блока однією рукою", "Пуловер на верхньому блоці прямими руками", "Тяга гантелей у нахилі", "Тяга штанги зворотним хватом у нахилі", "Тяга верхнього блока зворотним хватом", "Тяга верхнього блока V-рукояттю", "Тяга верхнього блока однією рукою", "Тяга гантелей лежачи на похилій лаві", "Шраги зі штангою", "Шраги з гантелями", "Тяга верхнього блока з упором у лаву, пряма штанга (верх найширших)", "Тяга верхнього блока з упором у лаву, EZ-гриф (усі найширші)", "Тяга верхнього блока на колінах широким хватом (низ найширших)", "Тяга верхнього блока сидячи з упором грудьми, вузька рукоять (середина найширших)", "Тяга верхнього блока з упором у лаву, пряма штанга (середина і низ найширших)"], "Плечі": ["Жим гантелей сидячи", "Махи гантелями в сторони", "Тяга штанги до підборіддя широким хватом", "Зворотні розведення в кросовері", "Жим штанги сидячи в тренажері Сміта", "Махи в сторону на нижньому блоці", "Підйом гантелей перед собою", "Тяга каната до обличчя", "Жим штанги стоячи", "Жим Арнольда", "Жим гантелей стоячи", "Махи гантелями в нахилі сидячи", "Підйом руки перед собою на блоці", "Тяга до підборіддя в тренажері Сміта", "Тяга гантелей до підборіддя"], "Задня поверхня стегна і сідниці": ["Румунська тяга зі штангою", "Присідання сумо з гантеллю", "Згинання ніг лежачи", "Нахили вперед зі штангою на плечах", "Румунська тяга з гантелями", "Сідничний місток у тренажері Сміта", "Нахили вперед зі штангою на плечах у Сміті", "Згинання однієї ноги лежачи", "Станова тяга на прямих ногах", "Румунська тяга в тренажері Сміта", "Станова тяга сумо", "Станова тяга", "Тяга каната між ногами"], "Литки": ["Підйом на носки стоячи в тренажері Сміта", "Підйом на носки сидячи", "Підйом на носки в тренажері для жиму ногами", "Підйом на носки на одній нозі з гантеллю", "Підйом на носки стоячи зі штангою", "Підйом на носки сидячи зі штангою", "Підйом на носки сидячи з гантеллю на одній нозі", "Підйом на носки стоячи з гантелями"]};
 const PLAN = {"Жим штанги лежачи": "4 × 8–10", "Жим штанги на похилій лаві": "4 × 8–10", "Жим гантелей на лаві під кутом 30°": "4 × 10–12", "Зведення рук у кросовері": "4 × 12–15", "Жим штанги вузьким хватом лежачи": "4 × 8–10", "Розгинання рук на верхньому блоці": "4 × 12–15", "Французький жим зі штангою лежачи": "4 × 10–12", "Розгинання гантелі з-за голови сидячи": "4 × 12", "Присідання зі штангою": "4 × 8–10", "Жим ногами": "4 × 12", "Гоблет-присідання з гантеллю": "4 × 12", "Розгинання ніг сидячи": "4 × 15", "Підйом штанги на біцепс стоячи": "4 × 10–12", "Молоткові згинання з гантелями": "4 × 12", "Згинання з гантелями на похилій лаві": "4 × 10–12", "Згинання рук на нижньому блоці": "4 × 12–15", "Тяга верхнього блока широким хватом": "4 × 8–10", "Тяга штанги в нахилі": "4 × 8–10", "Тяга нижнього блока сидячи": "4 × 10–12", "Тяга гантелі однією рукою": "4 × 10 на кожну руку", "Жим гантелей сидячи": "4 × 8–10", "Махи гантелями в сторони": "4 × 12–15", "Тяга штанги до підборіддя широким хватом": "4 × 10–12", "Зворотні розведення в кросовері": "4 × 15", "Згинання зі штангою на лаві Скотта": "4 × 10–12", "Згинання гантелей стоячи з поворотом кисті": "4 × 10–12", "Концентровані згинання з гантеллю": "4 × 12 на кожну руку", "Молоткові згинання на блоці з канатом": "4 × 12–15", "Розгинання рук на блоці з канатом": "4 × 12–15", "Французький жим з гантелями лежачи": "4 × 10–12", "Розгинання гантелі в нахилі": "4 × 12 на кожну руку", "Розгинання з канатом з-за голови на блоці": "4 × 12", "Румунська тяга зі штангою": "4 × 8–10", "Присідання сумо з гантеллю": "4 × 12", "Згинання ніг лежачи": "4 × 12–15", "Нахили вперед зі штангою на плечах": "4 × 10–12", "Підйом на носки стоячи в тренажері Сміта": "4 × 15–20", "Підйом на носки сидячи": "4 × 15–20", "Підйом на носки в тренажері для жиму ногами": "4 × 15–20", "Підйом на носки на одній нозі з гантеллю": "4 × 12–15 на кожну", "Жим штанги на лаві з негативним нахилом": "4 × 8–10", "Жим у тренажері Сміта на похилій лаві": "4 × 10", "Жим гантелей лежачи на горизонтальній лаві": "4 × 10–12", "Зведення в кросовері знизу вгору": "4 × 12–15", "Жим у тренажері Сміта вузьким хватом": "4 × 8–10", "Розгинання на верхньому блоці зворотним хватом": "4 × 12–15", "Присідання в тренажері Сміта": "4 × 8–10", "Жим ногами вузькою постановкою стоп": "4 × 12", "Фронтальні присідання в тренажері Сміта": "4 × 10", "Розгинання однієї ноги сидячи": "4 × 12 на кожну", "Згинання гантелі на лаві Скотта": "4 × 10–12 на кожну руку", "Підйом штанги вузьким хватом": "4 × 10–12", "Згинання рук на верхніх блоках кросовера": "4 × 12–15", "Тяга верхнього блока вузьким хватом": "4 × 10–12", "Тяга в тренажері Сміта в нахилі": "4 × 8–10", "Тяга нижнього блока однією рукою": "4 × 12 на кожну руку", "Пуловер на верхньому блоці прямими руками": "4 × 12–15", "Жим штанги сидячи в тренажері Сміта": "4 × 8–10", "Махи в сторону на нижньому блоці": "4 × 12–15 на кожну руку", "Підйом гантелей перед собою": "4 × 12", "Тяга каната до обличчя": "4 × 15", "Румунська тяга з гантелями": "4 × 10–12", "Сідничний місток у тренажері Сміта": "4 × 10–12", "Нахили вперед зі штангою на плечах у Сміті": "4 × 10–12", "Згинання однієї ноги лежачи": "4 × 12 на кожну", "Підйом на носки стоячи зі штангою": "4 × 15–20", "Розведення гантелей лежачи": "4 × 12", "Розведення гантелей на похилій лаві": "4 × 12", "Жим у тренажері Сміта лежачи": "4 × 8–10", "Жим гантелей на лаві з негативним нахилом": "4 × 10–12", "Жим гантелей нейтральним хватом": "4 × 10–12", "Пуловер з гантеллю лежачи": "4 × 12", "Розгинання на блоці з V-рукояттю": "4 × 12–15", "Французький жим стоячи зі штангою": "4 × 10–12", "JM-жим": "4 × 8–10", "Жим гантелей вузьким хватом": "4 × 10–12", "Розгинання однією рукою на нижньому блоці": "4 × 12 на кожну руку", "Присідання зі штангою широкою постановкою": "4 × 8–10", "Присідання з гантелями": "4 × 12", "Фронтальні присідання зі штангою": "4 × 8–10", "Присідання до лави зі штангою": "4 × 10", "Згинання з гантелями сидячи": "4 × 10–12", "Згинання зі штангою зворотним хватом": "4 × 12", "Згинання Зоттмана": "4 × 10–12", "Згинання на лаві Скотта на блоці": "4 × 12", "Молоткові згинання навхрест": "4 × 12", "Підйом штанги широким хватом": "4 × 10–12", "Тяга гантелей у нахилі": "4 × 10–12", "Тяга штанги зворотним хватом у нахилі": "4 × 8–10", "Тяга верхнього блока зворотним хватом": "4 × 10–12", "Тяга верхнього блока V-рукояттю": "4 × 10–12", "Тяга верхнього блока однією рукою": "4 × 12 на кожну руку", "Тяга гантелей лежачи на похилій лаві": "4 × 10–12", "Шраги зі штангою": "4 × 12–15", "Шраги з гантелями": "4 × 12–15", "Жим штанги стоячи": "4 × 8–10", "Жим Арнольда": "4 × 10–12", "Жим гантелей стоячи": "4 × 10", "Махи гантелями в нахилі сидячи": "4 × 12–15", "Підйом руки перед собою на блоці": "4 × 12", "Тяга до підборіддя в тренажері Сміта": "4 × 10–12", "Тяга гантелей до підборіддя": "4 × 12", "Станова тяга на прямих ногах": "4 × 8–10", "Румунська тяга в тренажері Сміта": "4 × 10", "Станова тяга сумо": "4 × 8", "Станова тяга": "4 × 6–8", "Тяга каната між ногами": "4 × 12–15", "Підйом на носки сидячи зі штангою": "4 × 15", "Підйом на носки сидячи з гантеллю на одній нозі": "4 × 15 на кожну", "Підйом на носки стоячи з гантелями": "4 × 15–20", "Тяга верхнього блока з упором у лаву, пряма штанга (верх найширших)": "4 × 10–12", "Тяга верхнього блока з упором у лаву, EZ-гриф (усі найширші)": "4 × 10–12", "Тяга верхнього блока на колінах широким хватом (низ найширших)": "4 × 10–12", "Тяга верхнього блока сидячи з упором грудьми, вузька рукоять (середина найширших)": "4 × 10–12", "Тяга верхнього блока з упором у лаву, пряма штанга (середина і низ найширших)": "4 × 10–12"};
 const IMG = {"Жим штанги лежачи": "barbell_bench_press_-_medium_grip", "Жим штанги на похилій лаві": "barbell_incline_bench_press_-_medium_grip", "Жим гантелей на лаві під кутом 30°": "incline_dumbbell_press", "Зведення рук у кросовері": "cable_crossover", "Жим штанги вузьким хватом лежачи": "close-grip_barbell_bench_press", "Розгинання рук на верхньому блоці": "triceps_pushdown", "Французький жим зі штангою лежачи": "ez-bar_skullcrusher", "Розгинання гантелі з-за голови сидячи": "seated_triceps_press", "Присідання зі штангою": "barbell_squat", "Жим ногами": "leg_press", "Гоблет-присідання з гантеллю": "goblet_squat", "Розгинання ніг сидячи": "leg_extensions", "Підйом штанги на біцепс стоячи": "barbell_curl", "Молоткові згинання з гантелями": "hammer_curls", "Згинання з гантелями на похилій лаві": "incline_dumbbell_curl", "Згинання рук на нижньому блоці": "standing_biceps_cable_curl", "Тяга верхнього блока широким хватом": "wide-grip_lat_pulldown", "Тяга штанги в нахилі": "bent_over_barbell_row", "Тяга нижнього блока сидячи": "seated_cable_rows", "Тяга гантелі однією рукою": "one-arm_dumbbell_row", "Жим гантелей сидячи": "seated_dumbbell_press", "Махи гантелями в сторони": "side_lateral_raise", "Тяга штанги до підборіддя широким хватом": "upright_barbell_row", "Зворотні розведення в кросовері": "cable_rear_delt_fly", "Згинання зі штангою на лаві Скотта": "preacher_curl", "Згинання гантелей стоячи з поворотом кисті": "dumbbell_alternate_bicep_curl", "Концентровані згинання з гантеллю": "concentration_curls", "Молоткові згинання на блоці з канатом": "cable_hammer_curls_-_rope_attachment", "Розгинання рук на блоці з канатом": "triceps_pushdown_-_rope_attachment", "Французький жим з гантелями лежачи": "lying_dumbbell_tricep_extension", "Розгинання гантелі в нахилі": "tricep_dumbbell_kickback", "Розгинання з канатом з-за голови на блоці": "triceps_overhead_extension_with_rope", "Румунська тяга зі штангою": "romanian_deadlift", "Присідання сумо з гантеллю": "plie_dumbbell_squat", "Згинання ніг лежачи": "lying_leg_curls", "Нахили вперед зі штангою на плечах": "good_morning", "Підйом на носки стоячи в тренажері Сміта": "smith_machine_calf_raise", "Підйом на носки сидячи": "seated_calf_raise", "Підйом на носки в тренажері для жиму ногами": "calf_press_on_the_leg_press_machine", "Підйом на носки на одній нозі з гантеллю": "standing_dumbbell_calf_raise", "Жим штанги на лаві з негативним нахилом": "decline_barbell_bench_press", "Жим у тренажері Сміта на похилій лаві": "smith_machine_incline_bench_press", "Жим гантелей лежачи на горизонтальній лаві": "dumbbell_bench_press", "Зведення в кросовері знизу вгору": "low_cable_crossover", "Жим у тренажері Сміта вузьким хватом": "smith_machine_close-grip_bench_press", "Розгинання на верхньому блоці зворотним хватом": "reverse_grip_triceps_pushdown", "Присідання в тренажері Сміта": "smith_machine_squat", "Жим ногами вузькою постановкою стоп": "narrow_stance_leg_press", "Фронтальні присідання в тренажері Сміта": "front_barbell_squat", "Розгинання однієї ноги сидячи": "single-leg_leg_extension", "Згинання гантелі на лаві Скотта": "one_arm_dumbbell_preacher_curl", "Підйом штанги вузьким хватом": "close-grip_standing_barbell_curl", "Згинання рук на верхніх блоках кросовера": "high_cable_curls", "Тяга верхнього блока вузьким хватом": "close-grip_front_lat_pulldown", "Тяга в тренажері Сміта в нахилі": "smith_machine_bent_over_row", "Тяга нижнього блока однією рукою": "seated_one-arm_cable_pulley_rows", "Пуловер на верхньому блоці прямими руками": "straight-arm_pulldown", "Жим штанги сидячи в тренажері Сміта": "smith_machine_overhead_shoulder_press", "Махи в сторону на нижньому блоці": "standing_low-pulley_deltoid_raise", "Підйом гантелей перед собою": "front_two-dumbbell_raise", "Тяга каната до обличчя": "face_pull", "Румунська тяга з гантелями": "stiff-legged_dumbbell_deadlift", "Сідничний місток у тренажері Сміта": "barbell_glute_bridge", "Нахили вперед зі штангою на плечах у Сміті": "good_morning", "Згинання однієї ноги лежачи": "lying_leg_curls", "Підйом на носки стоячи зі штангою": "standing_barbell_calf_raise", "Розведення гантелей лежачи": "dumbbell_flyes", "Розведення гантелей на похилій лаві": "incline_dumbbell_flyes", "Жим у тренажері Сміта лежачи": "smith_machine_bench_press", "Жим гантелей на лаві з негативним нахилом": "decline_dumbbell_bench_press", "Жим гантелей нейтральним хватом": "dumbbell_bench_press_with_neutral_grip", "Пуловер з гантеллю лежачи": "bent-arm_dumbbell_pullover", "Розгинання на блоці з V-рукояттю": "triceps_pushdown_-_v-bar_attachment", "Французький жим стоячи зі штангою": "standing_overhead_barbell_triceps_extension", "JM-жим": "jm_press", "Жим гантелей вузьким хватом": "close-grip_dumbbell_press", "Розгинання однією рукою на нижньому блоці": "standing_low-pulley_one-arm_triceps_extension", "Присідання зі штангою широкою постановкою": "wide_stance_barbell_squat", "Присідання з гантелями": "dumbbell_squat", "Фронтальні присідання зі штангою": "front_barbell_squat", "Присідання до лави зі штангою": "barbell_squat_to_a_bench", "Згинання з гантелями сидячи": "seated_dumbbell_curl", "Згинання зі штангою зворотним хватом": "reverse_barbell_curl", "Згинання Зоттмана": "zottman_curl", "Згинання на лаві Скотта на блоці": "cable_preacher_curl", "Молоткові згинання навхрест": "cross_body_hammer_curl", "Підйом штанги широким хватом": "wide-grip_standing_barbell_curl", "Тяга гантелей у нахилі": "bent_over_two-dumbbell_row", "Тяга штанги зворотним хватом у нахилі": "reverse_grip_bent-over_rows", "Тяга верхнього блока зворотним хватом": "underhand_cable_pulldowns", "Тяга верхнього блока V-рукояттю": "v-bar_pulldown", "Тяга верхнього блока однією рукою": "one_arm_lat_pulldown", "Тяга гантелей лежачи на похилій лаві": "dumbbell_incline_row", "Шраги зі штангою": "barbell_shrug", "Шраги з гантелями": "dumbbell_shrug", "Жим штанги стоячи": "standing_military_press", "Жим Арнольда": "arnold_dumbbell_press", "Жим гантелей стоячи": "standing_dumbbell_press", "Махи гантелями в нахилі сидячи": "seated_bent-over_rear_delt_raise", "Підйом руки перед собою на блоці": "front_cable_raise", "Тяга до підборіддя в тренажері Сміта": "smith_machine_upright_row", "Тяга гантелей до підборіддя": "standing_dumbbell_upright_row", "Станова тяга на прямих ногах": "stiff-legged_barbell_deadlift", "Румунська тяга в тренажері Сміта": "smith_machine_stiff-legged_deadlift", "Станова тяга сумо": "sumo_deadlift", "Станова тяга": "barbell_deadlift", "Тяга каната між ногами": "pull_through", "Підйом на носки сидячи зі штангою": "barbell_seated_calf_raise", "Підйом на носки сидячи з гантеллю на одній нозі": "dumbbell_seated_one-leg_calf_raise", "Підйом на носки стоячи з гантелями": "standing_dumbbell_calf_raise"};
@@ -275,6 +282,8 @@ const EXTRA = {
 };
 Object.entries(EXTRA).forEach(([g, list]) => list.forEach(([n, p]) => { if (!LIB[g].includes(n)) LIB[g].push(n); if (!PLAN[n]) PLAN[n] = p; }));
 OLD[1][6] = [];
+OLD[1][7] = [["Вправи", []]];
+LIB["Вправи"] = [...new Set(Object.keys(LIB).flatMap(g => LIB[g]))];
 const SETS = 4;
 const $ = id => document.getElementById(id);
 const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
@@ -292,8 +301,9 @@ let firstSnap = true, saveTimer = null, writing = Promise.resolve(), dirty = fal
 
 function dayLayout(day){
   if (day === 6) return [];
+  if (day === 7) { const sv = cfg.days && cfg.days[7]; return Array.isArray(sv) && sv[0] && Array.isArray(sv[0].n) ? clone(sv) : [{g:"Вправи", n:[]}]; }
   const saved = cfg.days && cfg.days[day];
-  const ok = Array.isArray(saved) && saved.length === DAYS[day].g.length && saved.every((x,i) => x && x.g === DAYS[day].g[i] && Array.isArray(x.n));
+  const ok = day !== 7 && Array.isArray(saved) && saved.length === DAYS[day].g.length && saved.every((x,i) => x && x.g === DAYS[day].g[i] && Array.isArray(x.n));
   return ok ? clone(saved) : OLD[1][day].map(([g, n]) => ({g, n:[...n]}));
 }
 function blank(day, date){
@@ -319,6 +329,44 @@ function status(t, cls){ const s = $("status"); s.textContent = t; s.className =
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
 function attr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 
+/* ---------- progression advice (double progression: reps up to the top of the range, then more weight) ---------- */
+function range(name){
+  const m = (PLAN[name] || "").match(/×\s*(\d+)(?:\s*[–-]\s*(\d+))?/);
+  return m ? {lo:+m[1], hi:+(m[2] || m[1])} : {lo:8, hi:12};
+}
+function step(name){
+  const n = name.toLowerCase();
+  if (/присідан|жим ногами|станова|румунська|сідничний|нахили вперед/.test(n)) return 10;
+  if (/штанг|сміт|жим .*лежачи/.test(n) && !/гантел|блоц|блок|кросовер|розгинан|згинан|french|французьк/.test(n)) return 10;
+  return 5;
+}
+const r5 = v => Math.round(v / 5) * 5 || 5;
+function adviceFor(name, before){
+  const pv = before !== undefined ? before : (cur ? prevFor(name) : null);
+  if (!pv) return null;
+  const sets = (pv.s || []).map(x => ({w: parseFloat(x.w) || 0, r: parseInt(x.r) || 0})).filter(x => x.r > 0);
+  if (!sets.length) return null;
+  const {lo, hi} = range(name), top = Math.max(...sets.map(x => x.w));
+  const work = sets.filter(x => x.w === top), inc = step(name), noW = top === 0;
+  if (noW) return {kind:"keep", w:0, short:"", text:`Без ваги: ціль ${hi} повторів у кожному підході.`};
+  if (work.length >= Math.min(2, sets.length) && work.every(x => x.r >= hi) && sets.length >= 3)
+    return {kind:"up", w: top + inc, short:`↑ ${top + inc} lb`, text:`Минулого разу ${top} lb на ${hi}+ повторів. Пора додати: <b>${top + inc} lb</b> (+${inc}), ціль ${lo}–${hi} повторів.`};
+  const minR = Math.min(...work.map(x => x.r));
+  if (minR < lo - 2 && work.length >= 2)
+    return {kind:"down", w: r5(top * 0.9), short:`↓ ${r5(top * 0.9)} lb`, text:`На ${top} lb вийшло лише ${minR} повт. (план ${lo}–${hi}). Зменш до <b>${r5(top * 0.9)} lb</b> і зроби чисто ${lo}+ повторів.`};
+  return {kind:"keep", w: top, short:`= ${top} lb`, text:`Залиш <b>${top} lb</b> і додай по 1 повтору. Коли в усіх підходах буде ${hi}, збільшимо вагу на ${inc} lb.`};
+}
+function readyCount(day){
+  const lay = dayLayout(day);
+  let n = 0;
+  lay.forEach(g => g.n.forEach(name => {
+    let best = null;
+    Object.values(all).forEach(d => { const e = (d.ex || []).find(e => e.n === name); if (e && e.s.some(x => x.r) && (!best || d.date > best.date)) best = {date:d.date, s:e.s}; });
+    const a = best && adviceFor(name, best); if (a && a.kind === "up") n++;
+  }));
+  return n;
+}
+
 /* ---------- start screen ---------- */
 function lastOf(day){ return sorted().find(r => r.day === day); }
 function suggestion(){
@@ -334,7 +382,8 @@ function renderPick(){
   $("types").innerHTML = ORDER.concat(6).map(d => {
     const l = lastOf(d);
     const info = d === sug ? "Пропоную сьогодні" : (l ? `Було ${ago(l.date)}` : "Ще не було");
-    return `<button class="type${d === sug ? " sug" : ""}${d === 6 ? " bike" : ""}" type="button" data-type="${d}"><b>${DAYS[d].t}</b><small>${info}</small></button>`;
+    const up = d <= 5 ? readyCount(d) : 0;
+    return `<button class="type${d === sug ? " sug" : ""}${d === 6 ? " bike" : ""}" type="button" data-type="${d}"><b>${DAYS[d].t}</b><small>${info}${up ? ` · ↑ вага у ${up} впр.` : ""}</small></button>`;
   }).join("");
 }
 
@@ -400,7 +449,8 @@ function renderList(){
       const pv = prevFor(name);
       const dc = doneCount(name);
       const prevShort = pv ? pv.s.filter(s=>s.w||s.r).map(s => `${s.w||"–"}×${s.r||"–"}`).join(", ") : "";
-      const sub = pv ? `Мин. раз: ${esc(prevShort)}` : (PLAN[name] ? `План ${PLAN[name]}` : "Ще не робив");
+      const adv = adviceFor(name);
+      const sub = pv ? `Мин. раз: ${esc(prevShort)}${adv && adv.short ? ` · <b class="adv-${adv.kind}">${adv.short}</b>` : ""}` : (PLAN[name] ? `План ${PLAN[name]}` : "Ще не робив");
       html += `<div class="ex${open ? " open" : ""}"><button class="exhead" type="button" data-tog="${key}" aria-expanded="${open}"><span class="nm">${n}. ${esc(name)}${open ? "" : `<small>${sub}</small>`}</span><span class="badge${dc >= SETS ? " done" : dc ? " part" : ""}">${dc >= SETS ? "✓" : `${dc}/${SETS}`}</span></button>`;
       if (open){
         let rows = "";
@@ -412,6 +462,7 @@ function renderList(){
         const nextKey = ks[ks.indexOf(key)+1];
         html += `<div class="exbody">
           <div class="plan">${PLAN[name] ? `План: <b>${PLAN[name]}</b>` : ""}${pv ? `${PLAN[name] ? " · " : ""}минулого разу ${fmtDate(pv.date).slice(0,5)}` : ""}</div>
+          ${adv ? `<div class="advice ${adv.kind}"><span>${adv.kind === "up" ? "Порада: збільш вагу" : adv.kind === "down" ? "Порада: зменш вагу" : "Порада"}</span><p style="margin:0">${adv.text}</p>${adv.w ? `<button class="tool acc" type="button" data-advw="${attr(name)}" data-w="${adv.w}">Поставити ${adv.w} lb у всі підходи</button>` : ""}</div>` : (PLAN[name] ? "" : `<div class="advice keep"><span>Порада</span>Перше тренування з цією вправою: підбери вагу, з якою робиш 8–12 повторів з запасом 1–2.</div>`)}
           <div class="sets">${rows}</div>
           <div class="tools">
             ${pv ? `<button class="tool acc" type="button" data-copy="${attr(name)}">Усі як минулого разу</button>` : ""}
@@ -561,6 +612,11 @@ document.addEventListener("click", e => {
   if (ds.copy){
     const pv = prevFor(ds.copy); if (!pv) return;
     cur.ex[ds.copy] = Array.from({length:SETS}, (_,i) => ({w:(pv.s[i]||{}).w||"", r:(pv.s[i]||{}).r||""}));
+    renderList(); scheduleSave(); return;
+  }
+  if (ds.advw){
+    const arr = setsOf(ds.advw);
+    arr.forEach(x => { x.w = ds.w; });
     renderList(); scheduleSave(); return;
   }
   if (ds.img){ showImg[ds.img] = !showImg[ds.img]; renderList(); return; }
