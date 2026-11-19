@@ -123,6 +123,14 @@ main .wrap{padding-block:14px 40px;display:grid;gap:12px}
 .badge.done{background:var(--ok);border-color:var(--ok);color:var(--accent-ink)}
 .exbody{padding:0 14px 14px;display:grid;gap:10px}
 .plan{font-size:14px;color:var(--muted)}
+.tgtbtn{border:0;background:none;color:var(--accent,#1f5fbf);text-decoration:underline;font:inherit;font-size:14px;padding:4px 2px;cursor:pointer}
+.tgtbox{display:grid;gap:8px;padding:10px;border:1px solid var(--line);border-radius:12px}
+.tgtrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tgtrow label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.tgtrow input{height:46px;border-radius:10px;border:1px solid var(--line);background:var(--card,#fff);color:inherit;font-size:18px;text-align:center;min-width:0}
+details.ogrp{border:1px solid var(--line);border-radius:12px;margin:6px 0;padding:0 8px}
+details.ogrp summary{padding:12px 4px;font-weight:700;cursor:pointer}
+details.ogrp summary small{color:var(--muted);font-weight:400}
 .plan b{color:var(--fg)}
 .sets{display:grid;gap:8px}
 .setrow{display:grid;grid-template-columns:28px minmax(0,1fr) 18px minmax(0,1fr) 64px;gap:6px;align-items:center}
@@ -280,11 +288,35 @@ const EXTRA = {
   "Задня поверхня стегна і сідниці": [["Відведення ноги назад на нижньому блоці","4 × 12–15 на кожну"],["Сідничний місток зі штангою на лаві","4 × 10–12"],["Румунська тяга на одній нозі з гантеллю","4 × 10 на кожну"]],
   "Литки": [["Підйом на носки в тренажері Сміта на платформі","4 × 15–20"]]
 };
+/* more for this gym: pull-up bar on the Smith/cable station, TRX straps, decline bench, floor */
+const MORE = {
+  "Груди": [["Віджимання від підлоги","4 × 12–20"],["Віджимання на TRX","4 × 10–15"],["Зведення в кросовері зверху вниз","4 × 12–15"],["Жим гантелей на похилій лаві 45°","4 × 8–10"],["Жим штанги на похилій лаві в тренажері Сміта вузьким хватом","4 × 8–10"]],
+  "Трицепс": [["Зворотні віджимання від лави","4 × 12–15"],["Віджимання вузьким хватом","4 × 10–15"],["Розгинання рук на TRX","4 × 10–12"],["Розгинання гантелі з-за голови стоячи двома руками","4 × 10–12"]],
+  "Ноги": [["Випади з гантелями","4 × 10 на кожну"],["Випади в тренажері Сміта","4 × 10 на кожну"],["Зашагування на лаву з гантелями","4 × 10 на кожну"],["Зворотні випади зі штангою","4 × 8–10 на кожну"],["Присідання на TRX","4 × 12–15"]],
+  "Біцепс": [["Згинання рук на TRX","4 × 10–12"],["Підтягування зворотним вузьким хватом","4 × 6–10"],["Згинання гантелей лежачи на похилій лаві обличчям вниз","4 × 10–12"]],
+  "Спина": [["Підтягування широким хватом","4 × 6–10"],["Підтягування нейтральним хватом","4 × 6–10"],["Тяга на TRX (горизонтальні підтягування)","4 × 10–15"],["Т-тяга: штанга одним кінцем у куті","4 × 8–10"],["Шраги в тренажері Сміта","4 × 12–15"],["Гіперекстензія на лаві","4 × 12–15"],["Тяга нижнього блока до обличчя стоячи","4 × 12–15"]],
+  "Плечі": [["Махи на TRX у сторони (Y-підйоми)","4 × 12–15"],["Жим штанги сидячи","4 × 8–10"],["Махи гантелями в сторони сидячи","4 × 12–15"],["Зворотні розведення на верхніх блоках кросовера","4 × 15"]],
+  "Задня поверхня стегна і сідниці": [["Відведення ноги вбік на нижньому блоці","4 × 15 на кожну"],["Сідничний місток на одній нозі","4 × 12 на кожну"],["Згинання ніг на TRX лежачи","4 × 10–12"],["Добре ранок зі штангою","4 × 10"]],
+  "Литки": [["Підйом на носки в тренажері Сміта на одній нозі","4 × 12–15 на кожну"]],
+  "Прес": [["Скручування на лаві з негативним нахилом","4 × 12–20"],["Підйом ніг у висі на перекладині","4 × 10–15"],["Скручування на верхньому блоці з канатом","4 × 12–15"],["Планка","3 × 30–60 с"],["Бічна планка","3 × 30–45 с на бік"],["Підйом колін на TRX","4 × 10–15"],["Дроворуб на блоці","4 × 12 на бік"],["Російські скручування з гантеллю","4 × 20"],["Підйом ніг лежачи на лаві","4 × 12–15"],["Скручування лежачи на підлозі","4 × 15–20"]]
+};
+LIB["Прес"] = LIB["Прес"] || [];
+Object.entries(MORE).forEach(([g, list]) => { EXTRA[g] = (EXTRA[g] || []).concat(list); });
 Object.entries(EXTRA).forEach(([g, list]) => list.forEach(([n, p]) => { if (!LIB[g].includes(n)) LIB[g].push(n); if (!PLAN[n]) PLAN[n] = p; }));
 OLD[1][6] = [];
 OLD[1][7] = [["Вправи", []]];
 LIB["Вправи"] = [...new Set(Object.keys(LIB).flatMap(g => LIB[g]))];
 const SETS = 4;
+/* his own target per exercise (sets × reps from–to); falls back to the plan */
+function tgt(name){
+  const t = (cfg.targets || {})[name];
+  if (t && t.lo) return {sets: t.sets || SETS, lo: t.lo, hi: t.hi || t.lo, own: true};
+  const m = (PLAN[name] || "").match(/(\d+)\s*×\s*(\d+)(?:\s*[–-]\s*(\d+))?/);
+  return m ? {sets: +m[1], lo: +m[2], hi: +(m[3] || m[2]), own: false} : {sets: SETS, lo: 8, hi: 12, own: false};
+}
+const setsFor = name => Math.min(8, Math.max(1, tgt(name).sets || SETS));
+const tgtText = name => { const t = tgt(name); return `${t.sets} × ${t.lo}${t.hi !== t.lo ? "–" + t.hi : ""}${/\d\s*с(\s|$)/.test(PLAN[name] || "") ? " с" : ""}`; };
+let tgtEdit = null;
 const $ = id => document.getElementById(id);
 const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
 const fmtDate = s => { const [y,m,d] = s.split("-"); return `${d}.${m}.${y}`; };
@@ -330,10 +362,7 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
 function attr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 
 /* ---------- progression advice (double progression: reps up to the top of the range, then more weight) ---------- */
-function range(name){
-  const m = (PLAN[name] || "").match(/×\s*(\d+)(?:\s*[–-]\s*(\d+))?/);
-  return m ? {lo:+m[1], hi:+(m[2] || m[1])} : {lo:8, hi:12};
-}
+function range(name){ const t = tgt(name); return {lo: t.lo, hi: t.hi}; }
 function step(name){
   const n = name.toLowerCase();
   if (/присідан|жим ногами|станова|румунська|сідничний|нахили вперед/.test(n)) return 10;
@@ -401,8 +430,8 @@ function prevFor(name){
 function doneCount(name){ return (cur.ex[name] || []).filter(s => s.w || s.r).length; }
 function slotName(key){ const [gi, si] = key.split("-").map(Number); return cur.lay[gi].n[si]; }
 function keys(){ const k = []; cur.lay.forEach((g, gi) => g.n.forEach((_, si) => k.push(`${gi}-${si}`))); return k; }
-function firstOpen(){ return keys().find(k => doneCount(slotName(k)) < SETS) || null; }
-function setsOf(name){ return cur.ex[name] || (cur.ex[name] = Array.from({length:SETS}, () => ({w:"", r:""}))); }
+function firstOpen(){ return keys().find(k => doneCount(slotName(k)) < setsFor(slotName(k))) || null; }
+function setsOf(name){ const a = cur.ex[name] || (cur.ex[name] = []); while (a.length < setsFor(name)) a.push({w:"", r:""}); return a; }
 
 function renderHeader(){
   const work = !!cur;
@@ -450,18 +479,22 @@ function renderList(){
       const dc = doneCount(name);
       const prevShort = pv ? pv.s.filter(s=>s.w||s.r).map(s => `${s.w||"–"}×${s.r||"–"}`).join(", ") : "";
       const adv = adviceFor(name);
-      const sub = pv ? `Мин. раз: ${esc(prevShort)}${adv && adv.short ? ` · <b class="adv-${adv.kind}">${adv.short}</b>` : ""}` : (PLAN[name] ? `План ${PLAN[name]}` : "Ще не робив");
-      html += `<div class="ex${open ? " open" : ""}"><button class="exhead" type="button" data-tog="${key}" aria-expanded="${open}"><span class="nm">${n}. ${esc(name)}${open ? "" : `<small>${sub}</small>`}</span><span class="badge${dc >= SETS ? " done" : dc ? " part" : ""}">${dc >= SETS ? "✓" : `${dc}/${SETS}`}</span></button>`;
+      const sub = pv ? `Мин. раз: ${esc(prevShort)}${adv && adv.short ? ` · <b class="adv-${adv.kind}">${adv.short}</b>` : ""}` : `Ціль ${tgtText(name)}`;
+      html += `<div class="ex${open ? " open" : ""}"><button class="exhead" type="button" data-tog="${key}" aria-expanded="${open}"><span class="nm">${n}. ${esc(name)}${open ? "" : `<small>${sub}</small>`}</span><span class="badge${dc >= setsFor(name) ? " done" : dc ? " part" : ""}">${dc >= setsFor(name) ? "✓" : `${dc}/${setsFor(name)}`}</span></button>`;
       if (open){
         let rows = "";
-        for (let i=0;i<SETS;i++){
+        for (let i=0;i<Math.max(setsFor(name), vals.length);i++){
           const v = vals[i] || {}, p = pv && pv.s[i] ? pv.s[i] : {};
           const cell = (k, lbl) => `<div class="cell"><span>${lbl}</span><input id="${cur.id}-${key}-${k}${i}" data-n="${attr(name)}" data-i="${i}" data-k="${k}" inputmode="${k==="w"?"decimal":"numeric"}" autocomplete="off" aria-label="Підхід ${i+1}, ${k==="w"?"вага lb":"повтори"}" value="${attr(v[k]||"")}" placeholder="${attr(p[k]||"")}" class="${v[k]?"filled":""}"></div>`;
           rows += `<div class="setrow"><span class="no">${i+1}</span>${cell("w","lb")}<span class="x">×</span>${cell("r","повт")}<button class="same" type="button" data-same="${key}" data-i="${i}" ${p.w||p.r ? "" : "disabled"} aria-label="Підхід ${i+1} як минулого разу">як<br>мин.</button></div>`;
         }
         const nextKey = ks[ks.indexOf(key)+1];
         html += `<div class="exbody">
-          <div class="plan">${PLAN[name] ? `План: <b>${PLAN[name]}</b>` : ""}${pv ? `${PLAN[name] ? " · " : ""}минулого разу ${fmtDate(pv.date).slice(0,5)}` : ""}</div>
+          ${tgtEdit === name ? `<div class="tgtbox"><b>Моя ціль для цієї вправи</b>
+            <div class="tgtrow"><label>Підходів<input id="tgS" inputmode="numeric" value="${tgt(name).sets}"></label><label>Повторів від<input id="tgL" inputmode="numeric" value="${tgt(name).lo}"></label><label>до<input id="tgH" inputmode="numeric" value="${tgt(name).hi}"></label></div>
+            <div class="tools"><button class="tool acc" type="button" data-tgtsave="${attr(name)}">Зберегти</button>${tgt(name).own ? `<button class="tool" type="button" data-tgtreset="${attr(name)}">Як у плані${PLAN[name] ? ` (${esc(PLAN[name])})` : ""}</button>` : ""}<button class="tool" type="button" data-tgtcancel="1">Скасувати</button></div>
+            <p class="plan">Порада по вазі рахується від цієї цілі: коли в усіх підходах зробиш верхню цифру, застосунок запропонує додати вагу.</p></div>`
+          : `<div class="plan">Ціль: <b>${tgtText(name)}</b>${tgt(name).own ? " (моя)" : ""} <button class="tgtbtn" type="button" data-tgt="${attr(name)}">змінити</button>${pv ? ` · минулого разу ${fmtDate(pv.date).slice(0,5)}` : ""}</div>`}
           ${adv ? `<div class="advice ${adv.kind}"><span>${adv.kind === "up" ? "Порада: збільш вагу" : adv.kind === "down" ? "Порада: зменш вагу" : "Порада"}</span><p style="margin:0">${adv.text}</p>${adv.w ? `<button class="tool acc" type="button" data-advw="${attr(name)}" data-w="${adv.w}">Поставити ${adv.w} lb у всі підходи</button>` : ""}</div>` : (PLAN[name] ? "" : `<div class="advice keep"><span>Порада</span>Перше тренування з цією вправою: підбери вагу, з якою робиш 8–12 повторів з запасом 1–2.</div>`)}
           <div class="sets">${rows}</div>
           <div class="tools">
@@ -485,8 +518,8 @@ function refreshBadge(name){
   const head = document.querySelector(`.exhead[data-tog="${key}"] .badge`);
   if (!head) return;
   const dc = doneCount(name);
-  head.className = "badge" + (dc >= SETS ? " done" : dc ? " part" : "");
-  head.textContent = dc >= SETS ? "✓" : `${dc}/${SETS}`;
+  head.className = "badge" + (dc >= setsFor(name) ? " done" : dc ? " part" : "");
+  head.textContent = dc >= setsFor(name) ? "✓" : `${dc}/${setsFor(name)}`;
 }
 function renderHist(){
   const rows = sorted().slice(0, 15);
@@ -516,9 +549,14 @@ function openPicker(gi, si){
   $("shBody").innerHTML = `<div class="customrow"><input id="cname" maxlength="80" placeholder="Своя вправа: впиши назву" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="button" data-cadd="1">Додати</button></div>`
     + names.map(n => {
       const isCur = n === curName, dis = !isCur && used.has(n);
-      return `<button class="opt${isCur ? " cur" : ""}" type="button" data-pickn="${attr(n)}" ${dis ? "disabled" : ""}>${IMG[n] ? `<img loading="lazy" decoding="async" src="img/${IMG[n]}.jpg" alt="">` : `<span class="noimg"></span>`}<span><b>${esc(n)}</b><small>${isCur ? "зараз у тренуванні" : dis ? "вже є в цьому тренуванні" : (PLAN[n] || "своя вправа")}</small></span></button>`;
-    }).join("");
+      return optHtml(n, isCur, dis);
+    }).join("")
+    + `<p class="plan" style="margin:14px 2px 4px">Інші групи м'язів: можна додати будь-яку вправу в це тренування</p>`
+    + Object.keys(LIB).filter(x => x !== g && x !== "Вправи").map(x => `<details class="ogrp"><summary>${esc(gl(x))} <small>${LIB[x].length}</small></summary>${LIB[x].map(n => optHtml(n, n === curName, n !== curName && used.has(n))).join("")}</details>`).join("");
   $("sheet").hidden = false; document.body.style.overflow = "hidden"; $("shBody").scrollTop = 0;
+}
+function optHtml(n, isCur, dis){
+  return `<button class="opt${isCur ? " cur" : ""}" type="button" data-pickn="${attr(n)}" ${dis ? "disabled" : ""}>${IMG[n] ? `<img loading="lazy" decoding="async" src="img/${IMG[n]}.jpg" alt="">` : `<span class="noimg"></span>`}<span><b>${esc(n)}</b><small>${isCur ? "зараз у тренуванні" : dis ? "вже є в цьому тренуванні" : (PLAN[n] || (cfg.targets || {})[n] ? tgtText(n) : "своя вправа")}</small></span></button>`;
 }
 function closePicker(){ $("sheet").hidden = true; document.body.style.overflow = ""; pick = null; }
 function applyPick(name){
@@ -611,7 +649,7 @@ document.addEventListener("click", e => {
   }
   if (ds.copy){
     const pv = prevFor(ds.copy); if (!pv) return;
-    cur.ex[ds.copy] = Array.from({length:SETS}, (_,i) => ({w:(pv.s[i]||{}).w||"", r:(pv.s[i]||{}).r||""}));
+    cur.ex[ds.copy] = Array.from({length:Math.max(setsFor(ds.copy), pv.s.length)}, (_,i) => ({w:(pv.s[i]||{}).w||"", r:(pv.s[i]||{}).r||""}));
     renderList(); scheduleSave(); return;
   }
   if (ds.advw){
@@ -619,6 +657,18 @@ document.addEventListener("click", e => {
     arr.forEach(x => { x.w = ds.w; });
     renderList(); scheduleSave(); return;
   }
+  if (ds.tgt){ tgtEdit = ds.tgt; renderList(); return; }
+  if (ds.tgtcancel){ tgtEdit = null; renderList(); return; }
+  if (ds.tgtsave){
+    const n = v => parseInt(($(v) || {}).value, 10);
+    let sets = n("tgS"), lo = n("tgL"), hi = n("tgH");
+    if (!(lo > 0)) { $("tgL").focus(); return; }
+    if (!(hi >= lo)) hi = lo;
+    sets = Math.min(8, Math.max(1, sets || SETS));
+    cfg.targets = cfg.targets || {}; cfg.targets[ds.tgtsave] = {sets, lo: Math.min(lo, 100), hi: Math.min(hi, 100)};
+    saveCfg(); tgtEdit = null; renderList(); return;
+  }
+  if (ds.tgtreset){ if (cfg.targets) delete cfg.targets[ds.tgtreset]; saveCfg(); tgtEdit = null; renderList(); return; }
   if (ds.img){ showImg[ds.img] = !showImg[ds.img]; renderList(); return; }
   if (ds.chg){ const [gi, si] = ds.chg.split("-").map(Number); return openPicker(gi, si); }
   if (ds.addg != null){ return openPicker(+ds.addg, null); }

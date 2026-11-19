@@ -7,9 +7,11 @@
     "sync": "node make-www.js && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.2.2",
     "@capacitor/android": "8.6.2",
     "@capacitor/cli": "8.6.2",
     "@capacitor/core": "8.6.2",
-    "@capgo/capacitor-health": "8.13.0"
+    "@capgo/capacitor-health": "8.13.0",
+    "@pantrist/capacitor-plugin-ml-kit-text-recognition": "^8.1.1"
   }
 }

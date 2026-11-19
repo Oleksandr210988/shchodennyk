@@ -209,6 +209,10 @@ tr.cur td{background:var(--accent-soft)}
 .scanrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .scanbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:84px;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:15px;text-align:center;cursor:pointer;padding:8px}
 .scanbtn svg{width:28px;height:28px}
+.scanbtn.wide{flex-direction:row;gap:10px;min-height:64px;border:0;width:100%;font-size:17px}
+label.link{cursor:pointer;color:var(--accent);text-decoration:underline;padding:8px;font-weight:600}
+details.ocrraw{font-size:13px;color:var(--muted)}
+details.ocrraw pre{white-space:pre-wrap;font-size:12px;max-height:180px;overflow:auto;margin:6px 0 0}
 .bcrow{display:flex;gap:8px}
 .bcrow input{flex:1;min-width:0;height:50px;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 12px;font-size:17px}
 .bcrow button{height:50px;border-radius:12px;border:1px solid var(--accent);background:var(--accent-soft);font-weight:600;padding:0 14px}
@@ -330,12 +334,19 @@ tr.cur td{background:var(--accent-soft)}
       <div id="stepNew" hidden style="display:flex;flex-direction:column;gap:12px">
         <button class="link" id="newBack" type="button">‹ Назад</button>
         <p class="fname">Новий продукт</p>
-        <div class="scanrow" id="scanRow">
-          <label class="scanbtn" for="bcFile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Сфотографувати штрихкод<input type="file" accept="image/*" capture="environment" id="bcFile" hidden></label>
-          <label class="scanbtn" for="lblFile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>Сфотографувати таблицю на етикетці<input type="file" accept="image/*" capture="environment" id="lblFile" hidden></label>
+        <div id="scanRow" style="display:flex;flex-direction:column;gap:8px">
+          <button class="scanbtn wide" type="button" id="scanBc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Сканувати штрихкод</button>
+          <p class="hint" style="margin:4px 2px 0">Немає штрихкоду або продукту немає в базі? Сфотографуйте таблицю калорій:</p>
+          <div class="scanrow">
+            <label class="scanbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>Таблиця: камера<input type="file" accept="image/*" capture="environment" id="lblFile" hidden></label>
+            <label class="scanbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>Таблиця: з галереї<input type="file" accept="image/*" id="lblGal" hidden></label>
+          </div>
+          <label class="link" style="text-align:center">Штрихкод з фото в галереї<input type="file" accept="image/*" id="bcGal" hidden></label>
+          <input type="file" accept="image/*" capture="environment" id="bcFile" hidden>
         </div>
         <div class="bcrow" id="bcRow"><input id="nBc" inputmode="numeric" placeholder="або впиши цифри штрихкоду" aria-label="Штрихкод"><button type="button" id="bcFind">Знайти</button></div>
         <p class="tip good" id="scanMsg" hidden></p>
+        <details class="ocrraw" id="ocrRaw" hidden><summary>Що розпізнано на фото</summary><pre id="ocrTxt"></pre></details>
         <div class="custom">
           <label class="wide">Назва<input id="nName" placeholder="Напр. йогурт грецький" autocomplete="off"></label>
           <label>Порція, г або мл<input id="nServ" type="number" min="0" step="any" inputmode="decimal" value="100"></label>
@@ -871,11 +882,12 @@ function renderAdvice() {
 function openNew() {
   $("stepPick").hidden = true; $("stepAmt").hidden = true; $("stepNew").hidden = false;
   const inApp = !!window.APPDB;
-  $("scanRow").hidden = !inApp; $("bcRow").hidden = !inApp;
+  $("scanRow").hidden = false; $("bcRow").hidden = false;
   ["nName", "nK", "nP", "nBc"].forEach(id => $(id).value = "");
+  $("ocrRaw").hidden = true;
   $("nName").value = $("q").value.trim();
   $("nServ").value = 100; $("nPiece").checked = false;
-  scanMsg(inApp ? "" : "Впиши цифри з етикетки. Сканування штрихкоду і фото етикетки працюють у застосунку «Калорії» на телефоні.");
+  scanMsg("");
   updNew(); $("shBody").scrollTop = 0;
 }
 function scanMsg(t, bad) { const m = $("scanMsg"); m.hidden = !t; m.textContent = t; m.className = "tip " + (bad ? "bad" : "good"); }
@@ -921,30 +933,85 @@ async function findBarcode(code, auto) {
     return true;
   } catch (e) { scanMsg("Немає інтернету або база не відповідає. Спробуй пізніше або сфотографуй етикетку.", true); return false; }
 }
+/* ---------- native helpers (Android app): Google barcode scanner and on-device text recognition ---------- */
+const NP = {};
+function nativePlugin(name) {
+  try {
+    const C = (window.parent && window.parent !== window && window.parent.Capacitor) || window.Capacitor;
+    if (!C || !C.isNativePlatform || !C.isNativePlatform() || !C.registerPlugin) return null;
+    return NP[name] || (NP[name] = C.registerPlugin(name));
+  } catch (e) { return null; }
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function scanBarcode() {
+  const B = nativePlugin("BarcodeScanner");
+  if (!B) { $("bcFile").click(); return; }
+  try {
+    let av = await B.isGoogleBarcodeScannerModuleAvailable();
+    if (!av.available) {
+      scanMsg("Перший раз телефон завантажує сканер від Google, це кілька секунд…");
+      try { await B.installGoogleBarcodeScannerModule(); } catch (e) {}
+      for (let i = 0; i < 40 && !(av = await B.isGoogleBarcodeScannerModuleAvailable()).available; i++) await sleep(1000);
+    }
+    const r = await B.scan({formats: ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128"]});
+    const b = r && r.barcodes && r.barcodes[0];
+    const code = b && (b.rawValue || b.displayValue);
+    if (code) { scanMsg(""); return findBarcode(String(code).replace(/\D/g, "") || code); }
+  } catch (e) {
+    if (/cancel/i.test(e && e.message || "")) return;
+    scanMsg("Сканер не запустився. Сфотографуйте штрихкод або таблицю калорій.", true);
+    $("bcFile").click();
+  }
+}
+/* photo → smaller JPEG (big phone photos are slow to read and often fail) */
+async function shrink(file, max = 1800) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, {imageOrientation: "from-image"}); } catch (e) { bmp = await createImageBitmap(file); }
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return c;
+}
 function loadScript(src) { return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
 async function decodeBarcode(file) {
+  let big = null, small = null;
+  try { big = await shrink(file, 2000); small = await shrink(file, 1000); } catch (e) {}
   try {
     if ("BarcodeDetector" in window) {
       const det = new BarcodeDetector({formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"]});
-      const r = await det.detect(await createImageBitmap(file));
-      if (r[0]) return r[0].rawValue;
+      for (const src of [big, small, await createImageBitmap(file)].filter(Boolean)) { const r = await det.detect(src); if (r[0]) return r[0].rawValue; }
     }
   } catch (e) {}
   try {
-    if (!window.ZXing) await loadScript("https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js");
-    const url = URL.createObjectURL(file);
-    const res = await new ZXing.BrowserMultiFormatReader().decodeFromImageUrl(url);
-    URL.revokeObjectURL(url);
-    return res && res.getText();
-  } catch (e) { return null; }
+    if (!window.ZXing) await loadScript("zxing.min.js").catch(() => loadScript("https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"));
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.CODE_128]);
+    const reader = new ZXing.MultiFormatReader(); reader.setHints(hints);
+    for (const c of [big, small].filter(Boolean)) {
+      for (const rot of [0, 90]) {
+        let cv = c;
+        if (rot) { cv = document.createElement("canvas"); cv.width = c.height; cv.height = c.width; const g = cv.getContext("2d"); g.translate(cv.width, 0); g.rotate(Math.PI / 2); g.drawImage(c, 0, 0); }
+        try {
+          const lum = new ZXing.HTMLCanvasElementLuminanceSource(cv);
+          for (const bin of [new ZXing.HybridBinarizer(lum), new ZXing.GlobalHistogramBinarizer(lum)]) {
+            try { const res = reader.decode(new ZXing.BinaryBitmap(bin)); if (res) return res.getText(); } catch (e) {}
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+  return null;
 }
-$("bcFile").addEventListener("change", async e => {
+const onBcPhoto = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   scanMsg("Читаю штрихкод…");
   const code = await decodeBarcode(f);
-  if (!code) { scanMsg("Не вдалося прочитати штрихкод. Сфотографуй ближче і рівно, або впиши цифри вручну.", true); return; }
+  if (!code) { scanMsg("Не вдалося прочитати штрихкод з фото. Сфотографуйте таблицю калорій, або впишіть цифри штрихкоду вручну.", true); return; }
   findBarcode(code);
-});
+};
+$("bcFile").addEventListener("change", onBcPhoto);
+$("bcGal").addEventListener("change", onBcPhoto);
 function parseLabel(text) {
   const s = text.toLowerCase().replace(/(\d),(\d)/g, "$1.$2").replace(/[oо](?=\d)|(?<=\d)[oо]/g, "0");
   const n = re => { const m = s.match(re); return m ? parseFloat(m[1]) : null; };
@@ -958,10 +1025,69 @@ function guessName(text) {
   const lines = text.split(/\n/).map(l => l.replace(/[^\p{L}\d %.,'-]/gu, "").trim()).filter(l => /\p{L}{3}/u.test(l) && !/(informaci|nutri|porci|calor|energ|grasa|prote|carbo|az[uú]car|sodio|serving|ingredient)/i.test(l));
   return lines[0] ? lines[0].slice(0, 40) : "";
 }
-async function ocr(f) {
+async function ocrLines(f) {
+  const c = await shrink(f, 2000);
+  const T = nativePlugin("CapacitorPluginMlKitTextRecognition");
+  if (T) {
+    const r = await T.detectText({base64Image: c.toDataURL("image/jpeg", 0.92).split(",")[1], rotation: 0});
+    const lines = [];
+    (r.blocks || []).forEach(b => (b.lines || []).forEach(l => { const bb = l.boundingBox || {}; lines.push({text: l.text, x0: bb.left, y0: bb.top, x1: bb.right, y1: bb.bottom}); }));
+    return {text: r.text || lines.map(l => l.text).join("\n"), lines};
+  }
+  // browser: grey + contrast helps Tesseract a lot
+  const g = c.getContext("2d"), im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+  for (let i = 0; i < d.length; i += 4) { let v = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128)); d[i] = d[i + 1] = d[i + 2] = v; }
+  g.putImageData(im, 0, 0);
   if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
-  const r = await Tesseract.recognize(f, "spa+eng");
-  return r.data.text || "";
+  const r = await Tesseract.recognize(c, "spa+eng");
+  const lines = (r.data.lines || []).map(l => ({text: l.text.trim(), x0: l.bbox.x0, y0: l.bbox.y0, x1: l.bbox.x1, y1: l.bbox.y1}));
+  return {text: r.data.text || "", lines};
+}
+async function ocr(f) { return (await ocrLines(f)).text; }
+/* nutrition table reader: rebuilds table rows from text positions, so "Calorías ..... 160" works even when the
+   label and the number are read as separate pieces; handles kcal/kJ, "por 100 g" columns and serving size */
+function parseTable(o) {
+  const L = (o.lines || []).filter(l => l.text && l.y1 > l.y0);
+  if (!L.length) return parseLabel(o.text || "");
+  const mid = l => (l.y0 + l.y1) / 2, ht = l => l.y1 - l.y0;
+  const sorted = [...L].sort((a, b) => mid(a) - mid(b));
+  const rows = [];
+  for (const l of sorted) {
+    const r = rows.find(r => Math.abs(mid(r[0]) - mid(l)) < Math.max(ht(r[0]), ht(l)) * 0.6);
+    r ? r.push(l) : rows.push([l]);
+  }
+  rows.forEach(r => r.sort((a, b) => a.x0 - b.x0));
+  const norm = t => t.toLowerCase().replace(/(\d),(\d)/g, "$1.$2").replace(/[oо](?=\d)|(?<=\d)[oо]/g, "0").replace(/(?<=\d)[il|]/g, "1");
+  const rowT = r => norm(r.map(l => l.text).join("  "));
+  // column for "100 g" if the table has one
+  let col100 = null;
+  for (const r of rows) for (const l of r) if (/(^|\D)100\s*(g|ml|gr)\b/.test(norm(l.text)) && !/porci|serving|tama/.test(rowT(r))) col100 = (l.x0 + l.x1) / 2;
+  const nums = (r, re) => {
+    const out = [];
+    r.forEach(l => { const t = norm(l.text); let m; const rx = new RegExp(re, "g"); while ((m = rx.exec(t))) out.push({v: parseFloat(m[1]), x: (l.x0 + l.x1) / 2, t: m[0]}); });
+    return out;
+  };
+  const pick = (arr) => {
+    if (!arr.length) return null;
+    if (col100 != null && arr.length > 1) return arr.reduce((a, b) => Math.abs(a.x - col100) < Math.abs(b.x - col100) ? a : b).v;
+    return arr[0].v;
+  };
+  let kcal = null, prot = null, serv = null;
+  for (const r of rows) {
+    const t = rowT(r);
+    if (kcal == null && /kcal|calor|energ/.test(t)) {
+      let a = nums(r, "(\\d+(?:\\.\\d+)?)\\s*k\\s?cal");
+      if (!a.length && /calor/.test(t)) a = nums(r, "(\\d+(?:\\.\\d+)?)(?!\\s*(?:%|kj|g\\b|mg))").filter(x => x.v > 0);
+      if (!a.length) { const kj = nums(r, "(\\d+(?:\\.\\d+)?)\\s*kj"); if (kj.length) a = kj.map(x => ({...x, v: Math.round(x.v / 4.184)})); }
+      kcal = pick(a);
+    }
+    if (prot == null && /prote/.test(t)) prot = pick(nums(r, "(\\d+(?:\\.\\d+)?)\\s*(?:g|gr)?(?!\\s*%)").filter(x => !/%/.test(x.t)));
+    if (serv == null && /porci|serving|tama/.test(t)) { const a = nums(r, "(\\d+(?:\\.\\d+)?)\\s*(?:g|gr|ml)\\b"); if (a.length) serv = a[0].v; }
+  }
+  const fb = parseLabel(o.text || "");
+  if (kcal == null) kcal = fb.kcal; if (prot == null) prot = fb.prot; if (serv == null) serv = fb.serv;
+  if (col100 != null) serv = 100;
+  return {serv, kcal, prot};
 }
 $("photoFile").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -980,8 +1106,9 @@ $("photoFile").addEventListener("change", async e => {
   $("stepNew").hidden = true;
   busy("Читаю таблицю калорій на етикетці… Перший раз це може зайняти до хвилини.");
   try {
-    const text = await ocr(f);
-    const v = parseLabel(text);
+    const o = await ocrLines(f), text = o.text;
+    const v = parseTable(o);
+    $("ocrTxt").textContent = text.trim() || "(нічого)"; $("ocrRaw").hidden = false;
     if (!$("nName").value) $("nName").value = guessName(text) || `Новий продукт ${pad(new Date().getDate())}.${pad(new Date().getMonth() + 1)}`;
     if (v.serv) $("nServ").value = v.serv;
     if (v.kcal != null) $("nK").value = v.kcal;
@@ -992,12 +1119,13 @@ $("photoFile").addEventListener("change", async e => {
     scanMsg(v.kcal != null ? "Розпізнав етикетку. Звір цифри і назву, потім натисни «Зберегти продукт»." : "Цифри не розпізнались. Сфотографуй таблицю калорій ближче і при гарному світлі, або впиши цифри вручну.", v.kcal == null);
   } catch (err) { busy(""); $("stepNew").hidden = false; scanMsg("Для розпізнавання потрібен інтернет. Спробуй ще раз або впиши цифри вручну.", true); }
 });
-$("lblFile").addEventListener("change", async e => {
+const onLabelPhoto = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   scanMsg("Розпізнаю етикетку… Перший раз це може зайняти до хвилини.");
   try {
-    const text = await ocr(f);
-    const v = parseLabel(text);
+    const o = await ocrLines(f), text = o.text;
+    const v = parseTable(o);
+    $("ocrTxt").textContent = text.trim() || "(нічого)"; $("ocrRaw").hidden = false;
     if (!$("nName").value) $("nName").value = guessName(text);
     if (v.serv) $("nServ").value = v.serv;
     if (v.kcal != null) $("nK").value = v.kcal;
@@ -1006,8 +1134,10 @@ $("lblFile").addEventListener("change", async e => {
     updNew();
     const got = [v.serv && "порцію", v.kcal != null && "калорії", v.prot != null && "білок"].filter(Boolean);
     scanMsg(got.length ? `Розпізнав ${got.join(", ")}. Обов'язково звір цифри з етикеткою, впиши назву і натисни «Зберегти продукт».` : "Цифри не розпізнались. Сфотографуй таблицю ближче, при гарному світлі, або впиши вручну.", !got.length);
-  } catch (err) { scanMsg("Для розпізнавання потрібен інтернет. Спробуй ще раз або впиши вручну.", true); }
-});
+  } catch (err) { scanMsg(nativePlugin("CapacitorPluginMlKitTextRecognition") ? "Не вдалося прочитати фото. Спробуйте ще раз або впишіть цифри вручну." : "Для розпізнавання потрібен інтернет. Спробуй ще раз або впиши вручну.", true); }
+};
+$("lblFile").addEventListener("change", onLabelPhoto);
+$("lblGal").addEventListener("change", onLabelPhoto);
 
 /* ---------- add / edit sheet ---------- */
 const sh = {mode: "add", meal: "lunch", food: null, unit: "g", entry: null, cat: ""};
@@ -1198,7 +1328,8 @@ document.addEventListener("click", ev => {
     case "prev": { const d = parseIso(current); d.setDate(d.getDate() - 1); return go(iso(d)); }
     case "next": { const d = parseIso(current); d.setDate(d.getDate() + 1); return go(iso(d)); }
     case "back": $("stepPick").hidden = false; $("stepAmt").hidden = true; return;
-    case "newProd": if (window.APPDB) { $("photoFile").click(); return; } return openNew();
+    case "newProd": return openNew();
+    case "scanBc": return scanBarcode();
     case "newBack": $("stepNew").hidden = true; $("stepPick").hidden = false; return;
     case "bcFind": return findBarcode($("nBc").value.replace(/\D/g, ""));
     case "nSave": return saveNew();
